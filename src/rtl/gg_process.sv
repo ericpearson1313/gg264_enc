@@ -16,6 +16,9 @@
 // IN THE SOFTWARE.
 //
 
+// Process a transform block
+// Input: block predictor, original video, qpy, offset, deadzone and block index
+// Output: recon, bitstream, sad, ssd, bitcount
 module gg_process
    #(
      parameter int BIT_LEN               = 17,
@@ -308,7 +311,6 @@ module gg_process
     logic [15:0][12:0] scan;
     logic [4:0] max_coeff;
     logic [15:0] sig_coeff_flag;
-    logic [15:0] one_flag;
     logic [4:0] last_coeff;
     logic [4:0] total_zeros;
     
@@ -327,8 +329,6 @@ module gg_process
     always_comb begin
         for( int ii = 0; ii < 16; ii++ ) begin
             sig_coeff_flag[ii] = |scan[ii];
-            one_flag[ii] = ( scan[ii] == 13'h1 || scan[ii] == 13'h1FFF ) ? 1'b1 : 1'b0;
-            
         end
         num_coeff = ( ( ( { 4'd0, sig_coeff_flag[ 0] } + { 4'd0, sig_coeff_flag[ 1] } ) + ( { 4'd0, sig_coeff_flag[ 2] } + { 4'd0, sig_coeff_flag[ 3] } ) )   +
                       ( ( { 4'd0, sig_coeff_flag[ 4] } + { 4'd0, sig_coeff_flag[ 5] } ) + ( { 4'd0, sig_coeff_flag[ 6] } + { 4'd0, sig_coeff_flag[ 7] } ) ) ) +
@@ -357,31 +357,41 @@ module gg_process
 	// Syntax Element: Trailing_ones_sign_flag
 	//////////////////////////////////////////
 
-	// int trailing_ones;
-	// vlc_t vlc_trailing_ones;
-    // 
-	// vlc_trailing_ones.i_bits = 0;
-	// vlc_trailing_ones.i_size = 0;
-    // 
-	// trailing_ones = 0;
-	// if( num_coeff ) {
-	// 	int ii = max_coeff;
-	// 	do {
-	// 		ii--;
-	// 		if (scan[ii] == 1) {
-	// 			vlc_trailing_ones.i_bits = vlc_trailing_ones.i_bits << 1;
-	// 			vlc_trailing_ones.i_size++;
-	// 			trailing_ones++;
-	// 		}
-	// 		else if (scan[ii] == -1) {
-	// 			vlc_trailing_ones.i_bits = (vlc_trailing_ones.i_bits << 1) | 1;
-	// 			vlc_trailing_ones.i_size++;
-	// 			trailing_ones++;
-	// 		}
-	// 	} while (trailing_ones < 3 && ii > 0 && scan[ii] <= 1 && scan[ii] >= -1);
-	// }
 
-
+    logic [15:0] one_flag;
+    logic [15:0] gt1_flag;
+    logic [15:0][1:0] t1_count;
+    logic [1:0] trailing_ones;
+    logic [15:0][2:0] sign_flag;
+    logic [71:0] vlc32_trailing_ones;
+    always_comb begin
+        for( int ii = 0; ii < 16; ii++ ) begin
+            one_flag[ii] = ( scan[ii] == 13'h1 || scan[ii] == 13'h1FFF ) ? 1'b1 : 1'b0; // abs(scan[ii])==1
+        end
+        for( int ii = 15; ii >= 0; ii-- ) begin // flag from 1st sig coeff >= 2 
+            gt1_flag[ii] = ( ii == 15 && !one_flag[15] && scan[15] != 0 ) ? 1'b1 : 
+                           ( gt1_flag[ii+1] || ( !one_flag[ii] && scan[ii] != 0 ) ) ? 1'b1 : 1'b0;
+        end
+        for( int ii = 15; ii >= 0; ii-- ) begin // need to stop at first scan coeff > 1
+            t1_count[ii] = ( ii = 15 )             ? { 1'b0, one_flag[15] } :
+                           ( t1_count[ii+1] == 3 ) ?   2'd3 : 
+                           ( !gt1_flag[ii] )       ? ( t1_count[ii+1] + { 1'b0, one_flag[ii] } ) : 
+                                                       t1_count[ii+1];
+        end
+        trailing_ones = t1_count[0];
+        for( int ii = 15; ii >= 0; ii-- ) begin
+            sign_flag[ii][0] = ( ii == 15 ) ? ( one_flag[15] & scan[15][12] ) : 
+                               ( t1_count[ii] == 2'd1 && t1_count[ii+1] == 2'd0 ) ? scan[ii][12] : sign_flag[ii+1][0];
+            sign_flag[ii][1] = ( ii == 15 ) ? 1'b0 : 
+                               ( t1_count[ii] == 2'd2 && t1_count[ii+1] == 2'd1 ) ? scan[ii][12] : sign_flag[ii+1][1];
+            sign_flag[ii][2] = ( ii == 15 || ii == 14 ) ? 1'b0 : 
+                               ( t1_count[ii] == 2'd3 && t1_count[ii+1] == 2'd2 ) ? scan[ii][12] : sign_flag[ii+1][2];
+        end
+        vlc32_trailing_ones = ( trailing_ones == 2'd0 ) ? { 32'b0, 32'b0, 8'd0 } :
+                              ( trailing_ones == 2'd1 ) ? { 31'b0, sign_flag[0][0], 32'b1, 8'd1 } :
+                              ( trailing_ones == 2'd2 ) ? { 30'b0, sign_flag[0][1:0], 32'b11, 8'd2 } :
+                            /*( trailing_ones == 2'd3 )*/ { 29'b0, sign_flag[0][2:0], 32'b111, 8'd3 }; 
+    end
 
 	//////////////////////////////////////////
 	// Syntax Element: Coeff_token
@@ -476,9 +486,125 @@ module gg_process
 	// 	}
 	// }
 
+	///////////////////////////////////////////////
+	// Syntax Element: level_prefix, level_suffix
+	///////////////////////////////////////////////
+	
+	// vlc_t vlc_level[16]; // Prefix + suffix
+	// int suffix_length;
+    // 
+	// for (int ii = 0; ii < 16; ii++) {
+	// 	vlc_level[ii].i_size = 0;
+	// 	vlc_level[ii].i_bits = 0;
+	// }
+    // 
+	// // select starting suffix.
+	// suffix_length = ( num_coeff > 10 && trailing_ones < 3) ? 1 : 0;
+    // 
+	// // Code significant coeffs
+	// if (num_coeff && num_coeff > trailing_ones) { // encode the coeffs
+	// 	int level_code;
+	// 	for (int sig_count = 0, coeff_idx = (max_coeff - 1); sig_count < num_coeff; coeff_idx--) {
+	// 		if (scan[coeff_idx]) {
+	// 			sig_count++;
+	// 			if (sig_count > trailing_ones) { // Encode coeff scan[coeff_idx]
+	// 				vlc_level[coeff_idx].i_size = 0;
+	// 				vlc_level[coeff_idx].i_bits = 0;
+	// 				// calculate level code
+	// 				level_code = (scan[coeff_idx] > 0) ? ((scan[coeff_idx] - 1) * 2) : ((-scan[coeff_idx] - 1) * 2 + 1);
+	// 				level_code -= (trailing_ones < 3 && sig_count == (trailing_ones + 1)) ? 2 : 0;
+	// 				// encode as prefix/suffix
+	// 				if (suffix_length == 0) { // handle special case of 14
+	// 					if (level_code < 14) { // unary + 0
+	// 						vlc_level[coeff_idx].i_size = level_code+1;
+	// 						vlc_level[coeff_idx].i_bits = 1;
+	// 					}
+	// 					else if (level_code < 30) { // prefix 14, 1, 34
+	// 						vlc_level[coeff_idx].i_size = 19;
+	// 						vlc_level[coeff_idx].i_bits = 16 + level_code - 14;
+	// 					}
+	// 					else { // prefix 15, 1, 12
+	// 						vlc_level[coeff_idx].i_size = 28;
+	// 						vlc_level[coeff_idx].i_bits = 4096 + level_code - 30;
+	// 					}
+	// 				}
+	// 				else  { // suffix length 1 ... 6
+	// 					if (level_code < (30 << (suffix_length - 1))) {
+	// 						vlc_level[coeff_idx].i_size = (level_code>>suffix_length) + 1 + suffix_length;
+	// 						vlc_level[coeff_idx].i_bits = (1<<suffix_length) + (level_code & ((1<<suffix_length)-1)); // mask suffix length bits.
+	// 					}
+	// 					else { // Prefix 15, 1, 12
+	// 						vlc_level[coeff_idx].i_size = 28;
+	// 						vlc_level[coeff_idx].i_bits = 4096 + level_code - (30<<(suffix_length-1));
+	// 					}
+	// 				}
+	// 				// update suffix_length state
+	// 				if (suffix_length == 0)
+	// 					suffix_length = 1;
+	// 				if (ABS(scan[coeff_idx]) > (3 << (suffix_length - 1)) && suffix_length < 6)
+	// 					suffix_length++;
+	// 			}
+	// 		}
+	// 	}
+	// }
 	
 	
     
+endmodule
+
+module table_9_10_run_before
+(
+    input logic [3:0] run_before,
+    input logic [3:0] zeros_left,
+    output logic [71:0] vlc32
+);   
+    always_comb begin
+        unique case( { zeros_left[2:0], run_before[3:0] } ) // synopsys parallel_case  
+            { 3'd1, 4'd0 } : vlc32 = { 32'h1, 32'h1, 8'd1 }; /*str=1*/
+            { 3'd1, 4'd1 } : vlc32 = { 32'h0, 32'h1, 8'd1 }; /*str=0*/
+            { 3'd2, 4'd0 } : vlc32 = { 32'h1, 32'h1, 8'd1 }; /*str=1*/
+            { 3'd2, 4'd1 } : vlc32 = { 32'h1, 32'h3, 8'd2 }; /*str=01*/
+            { 3'd2, 4'd2 } : vlc32 = { 32'h0, 32'h3, 8'd2 }; /*str=00*/
+            { 3'd3, 4'd0 } : vlc32 = { 32'h3, 32'h3, 8'd2 }; /*str=11*/
+            { 3'd3, 4'd1 } : vlc32 = { 32'h2, 32'h3, 8'd2 }; /*str=10*/
+            { 3'd3, 4'd2 } : vlc32 = { 32'h1, 32'h3, 8'd2 }; /*str=01*/
+            { 3'd3, 4'd3 } : vlc32 = { 32'h0, 32'h3, 8'd2 }; /*str=00*/
+            { 3'd4, 4'd0 } : vlc32 = { 32'h3, 32'h3, 8'd2 }; /*str=11*/
+            { 3'd4, 4'd1 } : vlc32 = { 32'h2, 32'h3, 8'd2 }; /*str=10*/
+            { 3'd4, 4'd2 } : vlc32 = { 32'h1, 32'h3, 8'd2 }; /*str=01*/
+            { 3'd4, 4'd3 } : vlc32 = { 32'h1, 32'h7, 8'd3 }; /*str=001*/
+            { 3'd4, 4'd4 } : vlc32 = { 32'h0, 32'h7, 8'd3 }; /*str=000*/
+            { 3'd5, 4'd0 } : vlc32 = { 32'h3, 32'h3, 8'd2 }; /*str=11*/
+            { 3'd5, 4'd1 } : vlc32 = { 32'h2, 32'h3, 8'd2 }; /*str=10*/
+            { 3'd5, 4'd2 } : vlc32 = { 32'h3, 32'h7, 8'd3 }; /*str=011*/
+            { 3'd5, 4'd3 } : vlc32 = { 32'h2, 32'h7, 8'd3 }; /*str=010*/
+            { 3'd5, 4'd4 } : vlc32 = { 32'h1, 32'h7, 8'd3 }; /*str=001*/
+            { 3'd5, 4'd5 } : vlc32 = { 32'h0, 32'h7, 8'd3 }; /*str=000*/
+            { 3'd6, 4'd0 } : vlc32 = { 32'h3, 32'h3, 8'd2 }; /*str=11*/
+            { 3'd6, 4'd1 } : vlc32 = { 32'h0, 32'h7, 8'd3 }; /*str=000*/
+            { 3'd6, 4'd2 } : vlc32 = { 32'h1, 32'h7, 8'd3 }; /*str=001*/
+            { 3'd6, 4'd3 } : vlc32 = { 32'h3, 32'h7, 8'd3 }; /*str=011*/
+            { 3'd6, 4'd4 } : vlc32 = { 32'h2, 32'h7, 8'd3 }; /*str=010*/
+            { 3'd6, 4'd5 } : vlc32 = { 32'h5, 32'h7, 8'd3 }; /*str=101*/
+            { 3'd6, 4'd6 } : vlc32 = { 32'h4, 32'h7, 8'd3 }; /*str=100*/
+            { 3'd7, 4'd0 } : vlc32 = { 32'h7, 32'h7, 8'd3 }; /*str=111*/
+            { 3'd7, 4'd1 } : vlc32 = { 32'h6, 32'h7, 8'd3 }; /*str=110*/
+            { 3'd7, 4'd2 } : vlc32 = { 32'h5, 32'h7, 8'd3 }; /*str=101*/
+            { 3'd7, 4'd3 } : vlc32 = { 32'h4, 32'h7, 8'd3 }; /*str=100*/
+            { 3'd7, 4'd4 } : vlc32 = { 32'h3, 32'h7, 8'd3 }; /*str=011*/
+            { 3'd7, 4'd5 } : vlc32 = { 32'h2, 32'h7, 8'd3 }; /*str=010*/
+            { 3'd7, 4'd6 } : vlc32 = { 32'h1, 32'h7, 8'd3 }; /*str=001*/
+            { 3'd7, 4'd7 } : vlc32 = { 32'h1, 32'hF, 8'd4 }; /*str=0001*/
+            { 3'd7, 4'd8 } : vlc32 = { 32'h1, 32'h1F, 8'd5 }; /*str=00001*/
+            { 3'd7, 4'd9 } : vlc32 = { 32'h1, 32'h3F, 8'd6 }; /*str=000001*/
+            { 3'd7, 4'd10 } : vlc32 = { 32'h1, 32'h7F, 8'd7 }; /*str=0000001*/
+            { 3'd7, 4'd11 } : vlc32 = { 32'h1, 32'hFF, 8'd8 }; /*str=00000001*/
+            { 3'd7, 4'd12 } : vlc32 = { 32'h1, 32'h1FF, 8'd9 }; /*str=000000001*/
+            { 3'd7, 4'd13 } : vlc32 = { 32'h1, 32'h3FF, 8'd10 }; /*str=0000000001*/
+            { 3'd7, 4'd14 } : vlc32 = { 32'h1, 32'h7FF, 8'd11 }; /*str=00000000001*/
+            default        : vlc32 = {72{1'bx}}; // don't care
+        endcase
+    end 
 endmodule
 
 module table_9_9_total_zeros_2x2
