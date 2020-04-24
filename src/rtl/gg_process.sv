@@ -25,6 +25,7 @@ module gg_process
      parameter int WORD_LEN              = 16
     )
     (
+    input wire clk,
     input wire [11:0]     orig[16],
     input wire [11:0]     pred[16],
     output logic [7:0]   recon[16],
@@ -40,14 +41,17 @@ module gg_process
     output logic [4:0] num_coeff, // Count of non-zero block coeffs
     input wire abv_out_of_pic,
     input wire left_out_of_pic,
-    input wire [7:0] abv_nc[4],
-    output logic [7:0] below_nc[4]
+    input wire [3:0][7:0] abv_nc,
+    output logic [3:0][7:0] below_nc
     );
     
     // Flags
 	wire dc_flag = ( cidx[2:0] == 4 || cidx[2:0] == 5 || cidx[2:0] == 6) ? 1'b1 : 1'b0;
 	wire ac_flag = ( cidx[2:0] == 1 || cidx[2:0] == 2 || cidx[2:0] == 3) ? 1'b1 : 1'b0;
 	wire ch_flag = ( cidx[2:0] == 2 || cidx[2:0] == 3 || cidx[2:0] == 4 || cidx[2:0] == 5) ? 1'b1 :1'b 0;    
+	wire cb_flag = ( cidx[2:0] == 2 || cidx[2:0] == 4 ) ? 1'b1 : 1'b0;
+	wire cr_flag = ( cidx[2:0] == 3 || cidx[2:0] == 5 ) ? 1'b1 : 1'b0;
+	wire y_flag  = ( cidx[2:0] == 0 || cidx[2:0] == 1 || cidx[2:0] == 6 ) ? 1'b1 : 1'b0;
 	
 	/////////////////////////////////////////
 	// Subtract Prediction
@@ -334,22 +338,27 @@ module gg_process
                       ( ( { 4'd0, sig_coeff_flag[ 4] } + { 4'd0, sig_coeff_flag[ 5] } ) + ( { 4'd0, sig_coeff_flag[ 6] } + { 4'd0, sig_coeff_flag[ 7] } ) ) ) +
                     ( ( ( { 4'd0, sig_coeff_flag[ 8] } + { 4'd0, sig_coeff_flag[ 9] } ) + ( { 4'd0, sig_coeff_flag[10] } + { 4'd0, sig_coeff_flag[11] } ) )   +
                       ( ( { 4'd0, sig_coeff_flag[12] } + { 4'd0, sig_coeff_flag[13] } ) + ( { 4'd0, sig_coeff_flag[14] } + { 4'd0, sig_coeff_flag[15] } ) ) ) ;
-        last_coeff = ( sig_coeff_flag[15] ) ? 5'd16 :
-                     ( sig_coeff_flag[14] ) ? 5'd15 :
-                     ( sig_coeff_flag[13] ) ? 5'd14 :
-                     ( sig_coeff_flag[12] ) ? 5'd13 :
-                     ( sig_coeff_flag[11] ) ? 5'd12 :
-                     ( sig_coeff_flag[10] ) ? 5'd11 :
-                     ( sig_coeff_flag[ 9] ) ? 5'd10 :
-                     ( sig_coeff_flag[ 8] ) ? 5'd9 :
-                     ( sig_coeff_flag[ 7] ) ? 5'd8 :
-                     ( sig_coeff_flag[ 6] ) ? 5'd7 :
-                     ( sig_coeff_flag[ 5] ) ? 5'd6 :
-                     ( sig_coeff_flag[ 4] ) ? 5'd5 :
-                     ( sig_coeff_flag[ 3] ) ? 5'd4 :
-                     ( sig_coeff_flag[ 2] ) ? 5'd3 :
-                     ( sig_coeff_flag[ 1] ) ? 5'd2 :
-                     ( sig_coeff_flag[ 0] ) ? 5'd1 : 5'd0;
+
+        //last_coeff = ( sig_coeff_flag[15] ) ? 5'd16 :
+        //             ( sig_coeff_flag[14] ) ? 5'd15 :
+        //             ( sig_coeff_flag[13] ) ? 5'd14 :
+        //             ( sig_coeff_flag[12] ) ? 5'd13 :
+        //             ( sig_coeff_flag[11] ) ? 5'd12 :
+        //             ( sig_coeff_flag[10] ) ? 5'd11 :
+        //             ( sig_coeff_flag[ 9] ) ? 5'd10 :
+        //             ( sig_coeff_flag[ 8] ) ? 5'd9 :
+        //             ( sig_coeff_flag[ 7] ) ? 5'd8 :
+        //             ( sig_coeff_flag[ 6] ) ? 5'd7 :
+        //             ( sig_coeff_flag[ 5] ) ? 5'd6 :
+        //             ( sig_coeff_flag[ 4] ) ? 5'd5 :
+        //             ( sig_coeff_flag[ 3] ) ? 5'd4 :
+        //             ( sig_coeff_flag[ 2] ) ? 5'd3 :
+        //             ( sig_coeff_flag[ 1] ) ? 5'd2 :
+        //             ( sig_coeff_flag[ 0] ) ? 5'd1 : 5'd0;
+        last_coeff = 0;
+        for( int ii = 16; ii > 0; ii-- ) 
+            if( last_coeff == 0 && sig_coeff_flag[ii-1] )
+                last_coeff = ii;
          total_zeros = last_coeff - num_coeff;
     end
 
@@ -397,39 +406,68 @@ module gg_process
 	// Syntax Element: Coeff_token
 	//////////////////////////////////////////
 
-	// int coeff_table_idx;
-	// vlc_t vlc_coeff_token;
-    // 
-	// if (ch_flag && dc_flag) {
-	// 	coeff_table_idx = 4;
-	// } else if ( dc_flag ) {
-	// 	int nc = lefnc[0] + abvnc[0];
-	// 	coeff_table_idx = (nc < 2) ? 0 : (nc < 4) ? 1 : (nc < 8) ? 2 : 3;
-	// }
-	// else {
-	// 	int abv_idx = (bidx & 1) + ((bidx & 4) >> 1);
-	// 	int lef_idx = ((bidx & 2) >> 1) + ((bidx & 8) >> 2);
-	// 	int nc;
-	// 	if (lefnc[lef_idx] != -1 && abvnc[abv_idx] != -1) {
-	// 		nc = (lefnc[lef_idx] + abvnc[abv_idx] +1)>>1;
-	// 	}
-	// 	else if (lefnc[lef_idx] != -1) {
-	// 		nc = lefnc[lef_idx];
-	// 	}
-	// 	else if (abvnc[abv_idx] != -1) {
-	// 		nc = abvnc[abv_idx];
-	// 	}
-	// 	else {
-	// 		nc = 0;
-	// 	}
-	// 	coeff_table_idx = (nc < 2) ? 0 : (nc < 4) ? 1 : (nc < 8) ? 2 : 3;
-	// 	// Update 
-	// 	lefnc[lef_idx] = num_coeff;
-	// 	abvnc[abv_idx] = num_coeff;
-	// }
-    // 
-	// vlc_coeff_token = ( num_coeff == 0 ) ? x264_coeff0_token[coeff_table_idx] : x264_coeff_token[coeff_table_idx][num_coeff-1][trailing_ones];
+    // TODO: need to handle abv/left interfacing
+    // TO SOLVE: pcm over-ride changes na to 16, RACE
+    
+    logic [71:0] vlc32_coeff_token;
+    logic [2:0] coeff_idx;
+    logic [4:0] na, nb, nc;
+    logic [5:0] nab;
+    
+    reg [4:0] left_y_nc_reg[4], abv_y_nc_reg[4];
+    reg [4:0] left_cb_nc_reg[2], abv_cb_nc_reg[2];
+    reg [4:0] left_cr_nc_reg[2], abv_cr_nc_reg[2];
+    
+    assign na = ( cb_flag && dc_flag ) ? left_cb_nc_reg[0] :
+                ( cr_flag && dc_flag ) ? left_cr_nc_reg[0] :
+                (  y_flag && dc_flag ) ? left_y_nc_reg[0] :
+                ( cb_flag            ) ? left_cb_nc_reg[ bidx[1] ] :
+                ( cr_flag            ) ? left_cr_nc_reg[ bidx[1] ] :
+                                         left_y_nc_reg[ { bidx[3], bidx[1] } ];
+                              
+    assign nb = ( cb_flag && dc_flag ) ? abv_cb_nc_reg[0] :
+                ( cr_flag && dc_flag ) ? abv_cr_nc_reg[0] :
+                (  y_flag && dc_flag ) ? abv_y_nc_reg[0] :
+                ( cb_flag            ) ? abv_cb_nc_reg[ bidx[0] ] :
+                ( cr_flag            ) ? abv_cr_nc_reg[ bidx[0] ] :
+                                         abv_y_nc_reg[ { bidx[2], bidx[0] } ];
 
+    assign nab[5:0] = { 1'b0, na[4:0] } + { 1'b0, nb[4:0] } + 6'd1;
+    
+    assign nc = ( left_out_of_pic && abv_out_of_pic && bidx == 0 ) ? 5'd0 :
+                ( left_out_of_pic && ( bidx == 0 || bidx == 2 || bidx == 8 || bidx == 10 ) ) ? nb[4:0] :
+                ( abv_out_of_pic  && ( bidx == 0 || bidx == 1 || bidx == 4 || bidx == 5  ) ) ? na[4:0] : nab[5:1];
+    
+    assign coeff_idx = ( ch_flag && dc_flag ) ? 3'd4 :
+                       ( |nc[4:3]           ) ? 3'd3 : // nc >= 8
+                       ( nc[2]              ) ? 3'd2 : // 4 <= nc < 8
+                       ( nc[1]              ) ? 3'd1 : // 2 <= nc < 4
+                                                3'd0 ; // 0 <= nc < 2 
+
+    table_9_5_coeff_token coeff_token_table_
+    (
+        .num_coeff      ( num_coeff[4:0]     ),
+        .trailing_ones  ( trailing_ones[1:0] ),
+        .table_idx      ( coeff_idx[2:0]     ),
+        .vlc32          ( vlc32_coeff_token )
+    );  
+
+    // Update nc context
+    
+    always_ff @(posedge clk) begin
+        if( !dc_flag ) begin
+            if( y_flag ) begin
+                left_y_nc_reg[ { bidx[3], bidx[1] } ] = num_coeff[4:0];
+                abv_y_nc_reg[  { bidx[2], bidx[1] } ] = num_coeff[4:0];
+            end else if ( cb_flag ) begin
+                left_y_nc_reg[ bidx[0] ] = num_coeff[4:0];
+                abv_y_nc_reg[  bidx[1] ] = num_coeff[4:0];
+            end else begin // cr flag
+                left_y_nc_reg[ bidx[0] ] = num_coeff[4:0];
+                abv_y_nc_reg[  bidx[1] ] = num_coeff[4:0];
+            end
+        end
+    end
    
 	//////////////////////////////////////////
 	// Syntax Element: Total zeros
