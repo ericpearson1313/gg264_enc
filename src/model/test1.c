@@ -694,8 +694,8 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
                 abvnc_y[xx * 4 + 2] = 0; abvnc_cr[xx * 2 + 0] = 0;
                 abvnc_y[xx * 4 + 3] = 0; abvnc_cr[xx * 2 + 1] = 0;
             }
-//            else if (macroblock_layer_length > 3088) { // A.3.1.n, max MB length is 3200, however PCM is pel(3072)+mbtype(9)+max align(7)=3088 
-            else if ( xx % 10 == 1 && yy % 10 == 1) { // A.3.1.n, max MB length is 3200, however PCM is pel(3072)+mbtype(9)+max align(7)=3088 
+            else if (macroblock_layer_length > 3088) { // A.3.1.n, max MB length is 3200, however PCM is pel(3072)+mbtype(9)+max align(7)=3088 
+//          else if ( xx % 10 == 1 && yy % 10 == 1) { // just force sparse pcm to test 
                 ggo_put_ue(skip_run, "mb_skip_run ue(v)");
                 skip_run = 0;
                 ggo_put_null("macroblock_layer() {           ");
