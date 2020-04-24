@@ -499,30 +499,44 @@ module gg_process
 	// Syntax Element: Run_before[]
 	//////////////////////////////////////////
 
-	// vlc_t vlc_run_before[14];
-    // 
-	// for (int ii = 0; ii < 14; ii++) {
-	// 	vlc_run_before[ii].i_size = 0;
-	// 	vlc_run_before[ii].i_bits = 0;
-	// }
-    // 
-	// int zeros = total_zeros;
-	// int run = 0;
-	// int last_sig;
-	// if (num_coeff > 1 && total_zeros) {
-	// 	for (last_sig = max_coeff - 1; scan[last_sig] == 0; last_sig--); // find last sign coeff
-	// 	for (int coeff_idx = last_sig-1, sig_count = 0; (sig_count < num_coeff-1) && zeros; coeff_idx--) {
-	// 		if (scan[coeff_idx]) {
-	// 			vlc_run_before[sig_count] = x264_run_before_init[MIN(zeros-1, 6)][run];
-	// 			sig_count++;
-	// 			zeros -= run;
-	// 			run = 0;
-	// 		}
-	// 		else {
-	// 			run++;
-	// 		}
-	// 	}
-	// }
+    logic [71:0] vlc32_run_before[14];
+    logic [3:0] run_before[16];
+    logic [3:0] zeros_left[16];
+    logic [15:0] first_sig_coeff;
+    logic [15:0] valid_run;
+
+    //TODO debug this logic
+    always_comb begin
+        for( int ii = 15; ii >= 0; ii-- ) begin
+            first_sig_coeff[ii] = ( ii == 15             ) ? 1'b1 : 
+                                  ( sig_coeff_flag[ii+1] ) ? 1'b0 : 
+                                                             first_sig_coeff[ii+1];
+            run_before[ii] = ( ii == 15                  ) ? 4'd0 : 
+                             ( first_sig_coeff[ii]       ) ? 4'd0 :
+                             ( sig_coeff_flag[ii]        ) ? 4'd0 : 
+                                                             (run_before[ii] + 4'd1);
+            zeros_left[ii] = ( ii == 15                  ) ? total_zeros :
+                             ( sig_coeff_flag[ii] && zeros_left[ii+1] == 4'd0 ) ? 4'd0 :
+                             ( sig_coeff_flag[ii] ) ? zeros_left[ii+1] - run_before[ii] : 
+                                                             run_before[ii];
+        end
+    end                               
+                               
+    // Run before lookup table
+    table_9_10_run_before run_before_table_0  ( .run_before( run_before[ 0][3:0]), .zeros_left( zeros_left[ 0][3:0]), .vlc32( vlc32_run_before[ 0][71:0]) );
+    table_9_10_run_before run_before_table_1  ( .run_before( run_before[ 1][3:0]), .zeros_left( zeros_left[ 1][3:0]), .vlc32( vlc32_run_before[ 1][71:0]) );
+    table_9_10_run_before run_before_table_2  ( .run_before( run_before[ 2][3:0]), .zeros_left( zeros_left[ 2][3:0]), .vlc32( vlc32_run_before[ 2][71:0]) );
+    table_9_10_run_before run_before_table_3  ( .run_before( run_before[ 3][3:0]), .zeros_left( zeros_left[ 3][3:0]), .vlc32( vlc32_run_before[ 3][71:0]) );
+    table_9_10_run_before run_before_table_4  ( .run_before( run_before[ 4][3:0]), .zeros_left( zeros_left[ 4][3:0]), .vlc32( vlc32_run_before[ 4][71:0]) );
+    table_9_10_run_before run_before_table_5  ( .run_before( run_before[ 5][3:0]), .zeros_left( zeros_left[ 5][3:0]), .vlc32( vlc32_run_before[ 5][71:0]) );
+    table_9_10_run_before run_before_table_6  ( .run_before( run_before[ 6][3:0]), .zeros_left( zeros_left[ 6][3:0]), .vlc32( vlc32_run_before[ 6][71:0]) );
+    table_9_10_run_before run_before_table_7  ( .run_before( run_before[ 7][3:0]), .zeros_left( zeros_left[ 7][3:0]), .vlc32( vlc32_run_before[ 7][71:0]) );
+    table_9_10_run_before run_before_table_8  ( .run_before( run_before[ 8][3:0]), .zeros_left( zeros_left[ 8][3:0]), .vlc32( vlc32_run_before[ 8][71:0]) );
+    table_9_10_run_before run_before_table_9  ( .run_before( run_before[ 9][3:0]), .zeros_left( zeros_left[ 9][3:0]), .vlc32( vlc32_run_before[ 9][71:0]) );
+    table_9_10_run_before run_before_table_10 ( .run_before( run_before[10][3:0]), .zeros_left( zeros_left[10][3:0]), .vlc32( vlc32_run_before[10][71:0]) );
+    table_9_10_run_before run_before_table_11 ( .run_before( run_before[11][3:0]), .zeros_left( zeros_left[11][3:0]), .vlc32( vlc32_run_before[11][71:0]) );
+    table_9_10_run_before run_before_table_12 ( .run_before( run_before[12][3:0]), .zeros_left( zeros_left[12][3:0]), .vlc32( vlc32_run_before[12][71:0]) );
+    table_9_10_run_before run_before_table_13 ( .run_before( run_before[13][3:0]), .zeros_left( zeros_left[13][3:0]), .vlc32( vlc32_run_before[13][71:0]) );
 
 	///////////////////////////////////////////////
 	// Syntax Element: level_prefix, level_suffix
@@ -598,6 +612,7 @@ module table_9_10_run_before
 );   
     always_comb begin
         unique case( { zeros_left[2:0], run_before[3:0] } ) // synopsys parallel_case  
+            { 3'd0, 4'b???? } : vlc32 = { 32'h0, 32'h0, 8'd0 }; /*str=<empty>*/
             { 3'd1, 4'd0 } : vlc32 = { 32'h1, 32'h1, 8'd1 }; /*str=1*/
             { 3'd1, 4'd1 } : vlc32 = { 32'h0, 32'h1, 8'd1 }; /*str=0*/
             { 3'd2, 4'd0 } : vlc32 = { 32'h1, 32'h1, 8'd1 }; /*str=1*/
