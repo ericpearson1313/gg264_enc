@@ -675,9 +675,27 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
             // Now and only now, we can nominally code the macroblock, skips not possible when ref1 is used
             if (refidx == 0 && cbp == 0) { // skip this MB if ref=0 and cbp=0
                 skip_run++;
-                // TODO: write recon
+                // Write Recon
+                for (int py = 0; py < 16; py++)
+                    for (int px = 0; px < 16; px++)
+                        ggo_recon_y[xx * 16 + px + (yy * 16 + py) * mb_width * 16] = 0xff & ggo_ref_y[refidx][xx * 16 + px + (yy * 16 + py) * mb_width * 16];
+                for (int py = 0; py < 8; py++)
+                    for (int px = 0; px < 8; px++) {
+                        ggo_recon_cb[xx * 8 + px + (yy * 8 + py) * mb_width * 8] = 0xff & ggo_ref_cb[refidx][xx * 8 + px + (yy * 8 + py) * mb_width * 8];
+                        ggo_recon_cr[xx * 8 + px + (yy * 8 + py) * mb_width * 8] = 0xff & ggo_ref_cr[refidx][xx * 8 + px + (yy * 8 + py) * mb_width * 8];
+                    }
+                // Force nC to zero, in case this skip decision was forced
+                lefnc_y[0] = 0;          lefnc_cb[0] = 0;
+                lefnc_y[1] = 0;          lefnc_cb[1] = 0;
+                lefnc_y[2] = 0;          lefnc_cr[0] = 0;
+                lefnc_y[3] = 0;          lefnc_cr[1] = 0;
+                abvnc_y[xx * 4 + 0] = 0; abvnc_cb[xx * 2 + 0] = 0;
+                abvnc_y[xx * 4 + 1] = 0; abvnc_cb[xx * 2 + 1] = 0;
+                abvnc_y[xx * 4 + 2] = 0; abvnc_cr[xx * 2 + 0] = 0;
+                abvnc_y[xx * 4 + 3] = 0; abvnc_cr[xx * 2 + 1] = 0;
             }
-            else if (macroblock_layer_length > 3088) { // A.3.1.n, max MB length is 3200, however PCM is pel(3072)+mbtype(9)+max align(7)=3088 
+//            else if (macroblock_layer_length > 3088) { // A.3.1.n, max MB length is 3200, however PCM is pel(3072)+mbtype(9)+max align(7)=3088 
+            else if ( xx % 10 == 1 && yy % 10 == 1) { // A.3.1.n, max MB length is 3200, however PCM is pel(3072)+mbtype(9)+max align(7)=3088 
                 ggo_put_ue(skip_run, "mb_skip_run ue(v)");
                 skip_run = 0;
                 ggo_put_null("macroblock_layer() {           ");
@@ -699,9 +717,18 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
                         ggo_recon_y[xx * 16 + px + (yy * 16 + py) * mb_width * 16] = ggi_y[xx * 16 + px + (yy * 16 + py) * mb_width * 16];
                 for (int py = 0; py < 8; py++)
                     for (int px = 0; px < 8; px++) {
-                        ggo_recon_y[xx * 8 + px + (yy * 8 + py) * mb_width * 8] = ggi_cb[xx * 8 + px + (yy * 8 + py) * mb_width * 8];
-                        ggo_recon_y[xx * 8 + px + (yy * 8 + py) * mb_width * 8] = ggi_cr[xx * 8 + px + (yy * 8 + py) * mb_width * 8];
+                        ggo_recon_cb[xx * 8 + px + (yy * 8 + py) * mb_width * 8] = ggi_cb[xx * 8 + px + (yy * 8 + py) * mb_width * 8];
+                        ggo_recon_cr[xx * 8 + px + (yy * 8 + py) * mb_width * 8] = ggi_cr[xx * 8 + px + (yy * 8 + py) * mb_width * 8];
                     }
+                // Update left, above nC's to 16 for PCM
+                lefnc_y[0] = 16; lefnc_cb[0] = 16;
+                lefnc_y[1] = 16; lefnc_cb[1] = 16;
+                lefnc_y[2] = 16; lefnc_cr[0] = 16;
+                lefnc_y[3] = 16; lefnc_cr[1] = 16;
+                abvnc_y[xx * 4 + 0] = 16; abvnc_cb[xx * 2 + 0] = 16;
+                abvnc_y[xx * 4 + 1] = 16; abvnc_cb[xx * 2 + 1] = 16;
+                abvnc_y[xx * 4 + 2] = 16; abvnc_cr[xx * 2 + 0] = 16;
+                abvnc_y[xx * 4 + 3] = 16; abvnc_cr[xx * 2 + 1] = 16;
             }
             else {
                 ggo_put_ue(skip_run, "mb_skip_run ue(v)");
