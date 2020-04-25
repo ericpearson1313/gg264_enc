@@ -38,6 +38,7 @@ module gg_process
     output logic [19:0] ssd, // 4x4 sum of squared difference
     output logic [8:0] bitcount, // bitcount to code block
     output logic [511:0] bits, // output bits (max 501
+    output logic [511:0] mask, // mask of valid output bits
     output logic [4:0] num_coeff, // Count of non-zero block coeffs
     input wire abv_out_of_pic,
     input wire left_out_of_pic,
@@ -339,22 +340,6 @@ module gg_process
                     ( ( ( { 4'd0, sig_coeff_flag[ 8] } + { 4'd0, sig_coeff_flag[ 9] } ) + ( { 4'd0, sig_coeff_flag[10] } + { 4'd0, sig_coeff_flag[11] } ) )   +
                       ( ( { 4'd0, sig_coeff_flag[12] } + { 4'd0, sig_coeff_flag[13] } ) + ( { 4'd0, sig_coeff_flag[14] } + { 4'd0, sig_coeff_flag[15] } ) ) ) ;
 
-        //last_coeff = ( sig_coeff_flag[15] ) ? 5'd16 :
-        //             ( sig_coeff_flag[14] ) ? 5'd15 :
-        //             ( sig_coeff_flag[13] ) ? 5'd14 :
-        //             ( sig_coeff_flag[12] ) ? 5'd13 :
-        //             ( sig_coeff_flag[11] ) ? 5'd12 :
-        //             ( sig_coeff_flag[10] ) ? 5'd11 :
-        //             ( sig_coeff_flag[ 9] ) ? 5'd10 :
-        //             ( sig_coeff_flag[ 8] ) ? 5'd9 :
-        //             ( sig_coeff_flag[ 7] ) ? 5'd8 :
-        //             ( sig_coeff_flag[ 6] ) ? 5'd7 :
-        //             ( sig_coeff_flag[ 5] ) ? 5'd6 :
-        //             ( sig_coeff_flag[ 4] ) ? 5'd5 :
-        //             ( sig_coeff_flag[ 3] ) ? 5'd4 :
-        //             ( sig_coeff_flag[ 2] ) ? 5'd3 :
-        //             ( sig_coeff_flag[ 1] ) ? 5'd2 :
-        //             ( sig_coeff_flag[ 0] ) ? 5'd1 : 5'd0;
         last_coeff = 0;
         for( int ii = 16; ii > 0; ii-- ) 
             if( last_coeff == 0 && sig_coeff_flag[ii-1] )
@@ -369,7 +354,7 @@ module gg_process
 
     logic [15:0] one_flag;
     logic [15:0] gt1_flag;
-    logic [15:0][1:0] t1_count;
+    logic [16:0][1:0] t1_count;
     logic [1:0] trailing_ones;
     logic [15:0][2:0] sign_flag;
     logic [71:0] vlc32_trailing_ones;
@@ -381,6 +366,7 @@ module gg_process
             gt1_flag[ii] = ( ii == 15 && !one_flag[15] && scan[15] != 0 ) ? 1'b1 : 
                            ( gt1_flag[ii+1] || ( !one_flag[ii] && scan[ii] != 0 ) ) ? 1'b1 : 1'b0;
         end
+        t1_count[16] = 2'd0;
         for( int ii = 15; ii >= 0; ii-- ) begin // need to stop at first scan coeff > 1
             t1_count[ii] = ( ii = 15 )             ? { 1'b0, one_flag[15] } :
                            ( t1_count[ii+1] == 3 ) ?   2'd3 : 
@@ -505,7 +491,6 @@ module gg_process
     logic [15:0] first_sig_coeff;
     logic [15:0] valid_run;
 
-    //TODO debug this logic
     always_comb begin
         for( int ii = 15; ii >= 0; ii-- ) begin
             first_sig_coeff[ii] = ( ii == 15             ) ? 1'b1 : 
@@ -542,67 +527,178 @@ module gg_process
 	// Syntax Element: level_prefix, level_suffix
 	///////////////////////////////////////////////
 	
-	// vlc_t vlc_level[16]; // Prefix + suffix
-	// int suffix_length;
-    // 
-	// for (int ii = 0; ii < 16; ii++) {
-	// 	vlc_level[ii].i_size = 0;
-	// 	vlc_level[ii].i_bits = 0;
-	// }
-    // 
-	// // select starting suffix.
-	// suffix_length = ( num_coeff > 10 && trailing_ones < 3) ? 1 : 0;
-    // 
-	// // Code significant coeffs
-	// if (num_coeff && num_coeff > trailing_ones) { // encode the coeffs
-	// 	int level_code;
-	// 	for (int sig_count = 0, coeff_idx = (max_coeff - 1); sig_count < num_coeff; coeff_idx--) {
-	// 		if (scan[coeff_idx]) {
-	// 			sig_count++;
-	// 			if (sig_count > trailing_ones) { // Encode coeff scan[coeff_idx]
-	// 				vlc_level[coeff_idx].i_size = 0;
-	// 				vlc_level[coeff_idx].i_bits = 0;
-	// 				// calculate level code
-	// 				level_code = (scan[coeff_idx] > 0) ? ((scan[coeff_idx] - 1) * 2) : ((-scan[coeff_idx] - 1) * 2 + 1);
-	// 				level_code -= (trailing_ones < 3 && sig_count == (trailing_ones + 1)) ? 2 : 0;
-	// 				// encode as prefix/suffix
-	// 				if (suffix_length == 0) { // handle special case of 14
-	// 					if (level_code < 14) { // unary + 0
-	// 						vlc_level[coeff_idx].i_size = level_code+1;
-	// 						vlc_level[coeff_idx].i_bits = 1;
-	// 					}
-	// 					else if (level_code < 30) { // prefix 14, 1, 34
-	// 						vlc_level[coeff_idx].i_size = 19;
-	// 						vlc_level[coeff_idx].i_bits = 16 + level_code - 14;
-	// 					}
-	// 					else { // prefix 15, 1, 12
-	// 						vlc_level[coeff_idx].i_size = 28;
-	// 						vlc_level[coeff_idx].i_bits = 4096 + level_code - 30;
-	// 					}
-	// 				}
-	// 				else  { // suffix length 1 ... 6
-	// 					if (level_code < (30 << (suffix_length - 1))) {
-	// 						vlc_level[coeff_idx].i_size = (level_code>>suffix_length) + 1 + suffix_length;
-	// 						vlc_level[coeff_idx].i_bits = (1<<suffix_length) + (level_code & ((1<<suffix_length)-1)); // mask suffix length bits.
-	// 					}
-	// 					else { // Prefix 15, 1, 12
-	// 						vlc_level[coeff_idx].i_size = 28;
-	// 						vlc_level[coeff_idx].i_bits = 4096 + level_code - (30<<(suffix_length-1));
-	// 					}
-	// 				}
-	// 				// update suffix_length state
-	// 				if (suffix_length == 0)
-	// 					suffix_length = 1;
-	// 				if (ABS(scan[coeff_idx]) > (3 << (suffix_length - 1)) && suffix_length < 6)
-	// 					suffix_length++;
-	// 			}
-	// 		}
-	// 	}
-	// }
 	
-	
+    logic [2:0] suffix_length[17];
+    logic [11:0] abs_coeff[16];
+    logic [15:0] enc_coeff; // flag to suffix/prefix code a scan coeff
+
+    always_comb begin
+        suffix_length[16][2:0] = ( num_coeff[4:0] > 5'd10 && trailing_ones[1:0] < 2'd3 ) ? 3'd1 : 3'd0;
+        for( int ii = 15; ii >= 0; ii-- ) begin
+            abs_coeff[ii] = ( scan[ii][12] ) ? ( ~scan[ii][11:0] + 12'd1 ) : scan[ii][11:0];
+            enc_coeff[ii] = ( sig_coeff_flag[ii] && t1_count[ii+1][1:0] == trailing_ones[1:0] ) ? 1'b1 : 1'b0;
+            suffix_length[ii] = ( !enc_coeff[ii] ) ? suffix_length[ii+1] :
+                                ( suffix_length[ii+1] == 0 && abs_coeff[ii+1][11:0] > 12'd3  ) ? 3'd2 :
+                                ( suffix_length[ii+1] == 0                                   ) ? 3'd1 :
+                                ( suffix_length[ii+1] == 1 && abs_coeff[ii+1][11:0] > 12'd3  ) ? 3'd2 :
+                                ( suffix_length[ii+1] == 2 && abs_coeff[ii+1][11:0] > 12'd6  ) ? 3'd3 :
+                                ( suffix_length[ii+1] == 3 && abs_coeff[ii+1][11:0] > 12'd12 ) ? 3'd4 :
+                                ( suffix_length[ii+1] == 4 && abs_coeff[ii+1][11:0] > 12'd24 ) ? 3'd5 :
+                                ( suffix_length[ii+1] == 5 && abs_coeff[ii+1][11:0] > 12'd48 ) ? 3'd2 :  3'd6 ;
+        end
+    end                               
+
+    // Calculate level code
+    logic [12:0] level_code[16];
+    logic special_coeff[16];
+    logic [4:0] sig_count[17];
+    always_comb begin
+        sig_count[16] = 5'd0;
+        for( int ii = 15; ii >= 0; ii++ ) begin
+            sig_count[ii][4:0] = sig_count[ii+1][4:0] + { 4'b0000, sig_coeff_flag[ii] }; 
+            special_coeff[ii] = ( sig_count[ii+1] == { 3'b000, trailing_ones[ii+1][1:0] } ) ? 1'b1 : 1'b0;
+        end
+        for( int ii = 0; ii < 16; ii++ ) begin
+            if( !enc_coeff[ii] ) begin
+                level_code[ii][12:0] = 13'd0;
+            end else begin
+                level_code[ii][12:0] =  ( ( scan[ii][12] ) ? { (scan[ii][12:0] - 13'd1), 1'b0 } : { ~scan[ii][12:0], 1'b1 } ) - ( ( special_coeff[ii] ) ? 13'd2 : 13'd0 );      
+            end
+        end
+    end                               
+
+    // prefix+suffix vlc code coefficients
+    logic [71:0] vlc32_prefix_suffix_coeff[16];
+    logic [6:0][12:0] p15_thresh = { 13'd960, 13'd480, 13'd240, 13'd120, 13'd 60, 13'd30, 13'd30 }; 
+    logic [14:0][15:0] mask_tbl = { 16'h7FFF, 16'h3FFF, 16'h1FFF, 16'hFFF, 16'h7FF, 16'h3FF, 16'h1FF, 16'hFF, 16'h7F, 16'h3F, 16'h1F, 16'hF, 16'h7, 16'h3, 16'h1 };
+    always_comb begin
+        for( int ii = 0; ii < 16; ii++ ) begin
+            if( !enc_coeff[ii] ) begin
+                vlc32_prefix_suffix_coeff[ii] = { 32'h0, 32'h0, 8'd0 };
+            end else if ( level_code[ii] >= p15_thresh[suffix_length[ii+1]] ) begin // prefix = 15 coding
+                vlc32_prefix_suffix_coeff[ii][ 7: 0] = 8'd28; // Length = 28 = 15 + 1 + 12
+                vlc32_prefix_suffix_coeff[ii][39: 8] = 32'hFFF_FFFF; // mask
+                vlc32_prefix_suffix_coeff[ii][51:40] = 13'hFFF & (level_code[ii][12:0] - p15_thresh[suffix_length[ii+1]][12:0]); 
+                vlc32_prefix_suffix_coeff[ii][71:52] = 20'b1; // end of prefix bits
+            end else if ( suffix_length[ii+1] == 3'd0 && level_code[ii][12:0] >= 13'd14 ) begin // prefix , 4 bit special case
+                vlc32_prefix_suffix_coeff[ii][ 7: 0] = 8'd19; // Length = 14 + 1 + 4 = 19
+                vlc32_prefix_suffix_coeff[ii][39: 8] = 32'h7_FFFF; // mask
+                vlc32_prefix_suffix_coeff[ii][43:40] = 13'hF & ( level_code[ii][12:0] - 13'd14 ); 
+                vlc32_prefix_suffix_coeff[ii][71:44] = 28'b1; // end of prefix bits
+            end else if( suffix_length[ii+1] == 3'd6 ) begin // prefix 0 to 13 unary with suffix len = 6
+                vlc32_prefix_suffix_coeff[ii][ 7: 0] = { 4'b0, level_code[ii][9:6] } + 8'd7; // length 
+                vlc32_prefix_suffix_coeff[ii][39: 8] = { 10'b0, ( mask_tbl[level_code[ii][9:6]][15:0] ), 6'b111111 }; // mask
+                vlc32_prefix_suffix_coeff[ii][45:40] = level_code[ii][5:0]; // end of prefix bits
+                vlc32_prefix_suffix_coeff[ii][71:46] = 26'b1; // end of prefix bits
+            end else if( suffix_length[ii+1] == 3'd5 ) begin // prefix 0 to 13 unary with suffix len = 5
+                vlc32_prefix_suffix_coeff[ii][ 7: 0] = { 4'b0, level_code[ii][8:5] } + 8'd6; // length 
+                vlc32_prefix_suffix_coeff[ii][39: 8] = { 11'b0, ( mask_tbl[level_code[ii][8:5]][15:0] ), 5'b11111 }; // mask
+                vlc32_prefix_suffix_coeff[ii][44:40] = level_code[ii][4:0]; // end of prefix bits
+                vlc32_prefix_suffix_coeff[ii][71:45] = 27'b1; // end of prefix bits
+            end else if( suffix_length[ii+1] == 3'd4 ) begin // prefix 0 to 13 unary with suffix len = 4
+                vlc32_prefix_suffix_coeff[ii][ 7: 0] = { 4'b0, level_code[ii][7:4] } + 8'd5; // length
+                vlc32_prefix_suffix_coeff[ii][39: 8] = { 12'b0, ( mask_tbl[level_code[ii][7:4]][15:0] ), 4'b1111 }; // mask
+                vlc32_prefix_suffix_coeff[ii][43:40] = level_code[ii][3:0]; // end of prefix bits
+                vlc32_prefix_suffix_coeff[ii][71:44] = 28'b1; // end of prefix bits
+            end else if( suffix_length[ii+1] == 3'd3 ) begin // prefix 0 to 13 unary with suffix len = 3
+                vlc32_prefix_suffix_coeff[ii][ 7: 0] = { 4'b0, level_code[ii][6:3] } + 8'd4; // length
+                vlc32_prefix_suffix_coeff[ii][39: 8] = { 13'b0, ( mask_tbl[level_code[ii][6:3]][15:0] ), 3'b111 }; // mask
+                vlc32_prefix_suffix_coeff[ii][42:40] = level_code[ii][2:0]; // end of prefix bits
+                vlc32_prefix_suffix_coeff[ii][71:43] = 29'b1; // end of prefix bits
+            end else if( suffix_length[ii+1] == 3'd2 ) begin // prefix 0 to 13 unary with suffix len = 2
+                vlc32_prefix_suffix_coeff[ii][ 7: 0] = { 4'b0, level_code[ii][5:2] } + 8'd3; // length
+                vlc32_prefix_suffix_coeff[ii][39: 8] = { 14'b0, ( mask_tbl[level_code[ii][5:2]][15:0] ), 2'b11 }; // mask
+                vlc32_prefix_suffix_coeff[ii][41:40] = level_code[ii][1:0]; // end of prefix bits
+                vlc32_prefix_suffix_coeff[ii][71:42] = 30'b1; // end of prefix bits
+            end else if( suffix_length[ii+1] == 3'd1 ) begin // prefix 0 to 13 unary with suffix len = 1
+                vlc32_prefix_suffix_coeff[ii][ 7: 0] = { 4'b0, level_code[ii][4:1] } + 8'd2; // length
+                vlc32_prefix_suffix_coeff[ii][39: 8] = { 15'b0, ( mask_tbl[level_code[ii][4:1]][15:0] ), 1'b1 }; // mask
+                vlc32_prefix_suffix_coeff[ii][   40] = level_code[0]; // end of prefix bits
+                vlc32_prefix_suffix_coeff[ii][71:41] = 31'b1; // end of prefix bits
+            end else begin // prefix 0 to 13 unary with suffix len = 0
+                vlc32_prefix_suffix_coeff[ii][ 7: 0] = { 4'b0, level_code[ii][3:0] } + 8'd1; // length
+                vlc32_prefix_suffix_coeff[ii][39: 8] = { 16'b0, ( mask_tbl[level_code[ii][3:0]][15:0] ) }; // mask
+                vlc32_prefix_suffix_coeff[ii][71:40] = 32'b1; // end of prefix bits
+            end
+        end
+    end                               
+
+    // VLC Concatenation
     
+    logic [71:0] vlc32_cat[15];
+    logic [135:0] vlc64_cat[9];
+    logic [263:0] vlc128_cat[5];
+    logic [527:0] vlc256_cat[4];
+    logic [1039:0] vlc512_cat;
+    
+    vlc_cat #( 13, 11, 10, 32, 8, 32, 8 ) cat_00_ ( .abcat(  vlc32_cat[ 0] ), .a(  vlc32_run_before[ 0]          ), .b( vlc32_run_before[ 1]          ) );
+    vlc_cat #( 11,  9,  8, 32, 8, 32, 8 ) cat_01_ ( .abcat(  vlc32_cat[ 1] ), .a(  vlc32_run_before[ 2]          ), .b( vlc32_run_before[ 3]          ) );
+    vlc_cat #(  9,  7,  6, 32, 8, 32, 8 ) cat_02_ ( .abcat(  vlc32_cat[ 2] ), .a(  vlc32_run_before[ 4]          ), .b( vlc32_run_before[ 5]          ) );
+    vlc_cat #(  7,  5,  4, 32, 8, 32, 8 ) cat_03_ ( .abcat(  vlc32_cat[ 3] ), .a(  vlc32_run_before[ 6]          ), .b( vlc32_run_before[ 7]          ) );
+    vlc_cat #(  5,  3,  3, 32, 8, 32, 8 ) cat_04_ ( .abcat(  vlc32_cat[ 4] ), .a(  vlc32_run_before[ 8]          ), .b( vlc32_run_before[ 9]          ) );
+    vlc_cat #(  4,  3,  2, 32, 8, 32, 8 ) cat_05_ ( .abcat(  vlc32_cat[ 5] ), .a(  vlc32_run_before[10]          ), .b( vlc32_run_before[11]          ) );
+    vlc_cat #(  2,  2,  1, 32, 8, 32, 8 ) cat_06_ ( .abcat(  vlc32_cat[ 6] ), .a(  vlc32_run_before[12]          ), .b( vlc32_run_before[13]          ) );
+    vlc_cat #( 19,  9, 13, 32, 8, 32, 8 ) cat_07_ ( .abcat(  vlc32_cat[ 7] ), .a(  vlc32_total_zeros             ), .b( vlc32_cat[ 0]                 ) );
+    vlc_cat #( 15, 11,  9, 32, 8, 32, 8 ) cat_08_ ( .abcat(  vlc32_cat[ 8] ), .a(  vlc32_cat[ 1]                 ), .b( vlc32_cat[ 2]                 ) ); 
+    vlc_cat #(  9,  7,  5, 32, 8, 32, 8 ) cat_09_ ( .abcat(  vlc32_cat[ 9] ), .a(  vlc32_cat[ 3]                 ), .b( vlc32_cat[ 4]                 ) ); 
+    vlc_cat #(  4,  4,  2, 32, 8, 32, 8 ) cat_10_ ( .abcat(  vlc32_cat[10] ), .a(  vlc32_cat[ 5]                 ), .b( vlc32_cat[ 6]                 ) );
+    vlc_cat #( 27, 19, 15, 32, 8, 32, 8 ) cat_11_ ( .abcat(  vlc32_cat[11] ), .a(  vlc32_cat[ 7]                 ), .b( vlc32_cat[ 8]                 ) );
+    vlc_cat #( 12,  9, 10, 32, 8, 32, 8 ) cat_12_ ( .abcat(  vlc32_cat[12] ), .a(  vlc32_cat[ 9]                 ), .b( vlc32_cat[10]                 ) );
+    vlc_cat #( 30, 27, 12, 32, 8, 32, 8 ) cat_13_ ( .abcat(  vlc32_cat[13] ), .a(  vlc32_cat[11]                 ), .b( vlc32_cat[12]                 ) );
+    vlc_cat #( 19, 16,  3, 32, 8, 32, 8 ) cat_14_ ( .abcat(  vlc32_cat[14] ), .a(  vlc32_coeff_token             ), .b( vlc32_trailing_ones           ) );
+    vlc_cat #( 47, 19, 28, 32, 8, 64, 8 ) cat_15_ ( .abcat(  vlc64_cat[ 0] ), .a(  vlc32_cat[14]                 ), .b( vlc32_prefix_suffix_coeff[15] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_16_ ( .abcat(  vlc64_cat[ 1] ), .a(  vlc32_prefix_suffix_coeff[14] ), .b( vlc32_prefix_suffix_coeff[13] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_17_ ( .abcat(  vlc64_cat[ 2] ), .a(  vlc32_prefix_suffix_coeff[12] ), .b( vlc32_prefix_suffix_coeff[13] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_18_ ( .abcat(  vlc64_cat[ 3] ), .a(  vlc32_prefix_suffix_coeff[10] ), .b( vlc32_prefix_suffix_coeff[13] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_19_ ( .abcat(  vlc64_cat[ 4] ), .a(  vlc32_prefix_suffix_coeff[ 8] ), .b( vlc32_prefix_suffix_coeff[13] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_20_ ( .abcat(  vlc64_cat[ 5] ), .a(  vlc32_prefix_suffix_coeff[ 6] ), .b( vlc32_prefix_suffix_coeff[13] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_21_ ( .abcat(  vlc64_cat[ 6] ), .a(  vlc32_prefix_suffix_coeff[ 4] ), .b( vlc32_prefix_suffix_coeff[13] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_22_ ( .abcat(  vlc64_cat[ 7] ), .a(  vlc32_prefix_suffix_coeff[ 2] ), .b( vlc32_prefix_suffix_coeff[13] ) );
+    vlc_cat #( 58, 28, 30, 32, 8, 64, 8 ) cat_23_ ( .abcat(  vlc64_cat[ 8] ), .a(  vlc32_prefix_suffix_coeff[ 0] ), .b( vlc32_cat[13]                 ) );
+    vlc_cat #(103, 47, 56, 64, 8,128, 8 ) cat_24_ ( .abcat( vlc128_cat[ 0] ), .a(  vlc64_cat[ 0]                 ), .b( vlc64_cat[ 1]                 ) );
+    vlc_cat #(112, 56, 56, 64, 8,128, 8 ) cat_25_ ( .abcat( vlc128_cat[ 1] ), .a(  vlc64_cat[ 2]                 ), .b( vlc64_cat[ 3]                 ) );
+    vlc_cat #(112, 56, 56, 64, 8,128, 8 ) cat_26_ ( .abcat( vlc128_cat[ 2] ), .a(  vlc64_cat[ 4]                 ), .b( vlc64_cat[ 5]                 ) );
+    vlc_cat #(112, 56, 56, 64, 8,128, 8 ) cat_27_ ( .abcat( vlc128_cat[ 3] ), .a(  vlc64_cat[ 6]                 ), .b( vlc64_cat[ 7]                 ) );
+    vlc_cat #( 58, 58,  0, 64, 8,128, 8 ) cat_28_ ( .abcat( vlc128_cat[ 4] ), .a(  vlc64_cat[ 8]                 ), .b(        136'b0                 ) );
+    vlc_cat #(215,103,112,128, 8,256,16 ) cat_29_ ( .abcat( vlc256_cat[ 0] ), .a( vlc128_cat[ 0]                 ), .b( vlc128_cat[ 1]                ) );
+    vlc_cat #(224,112,112,128, 8,256,16 ) cat_30_ ( .abcat( vlc256_cat[ 1] ), .a( vlc128_cat[ 2]                 ), .b( vlc128_cat[ 3]                ) );
+    vlc_cat #( 58, 58,  0,128, 8,256,16 ) cat_31_ ( .abcat( vlc256_cat[ 2] ), .a( vlc128_cat[ 4]                 ), .b(         264'b0                ) );
+    vlc_cat #(282,224, 58,256,16,256,16 ) cat_32_ ( .abcat( vlc256_cat[ 3] ), .a( vlc256_cat[ 1]                 ), .b( vlc256_cat[ 2]                ) );
+    vlc_cat #(497,215,282,256,16,512,16 ) cat_33_ ( .abcat( vlc512_cat     ), .a( vlc256_cat[ 0]                 ), .b( vlc256_cat[ 3]                ) );
+   
+    // Assign outputs
+    
+    assign bitcount[9:0] = vlc512_cat[9:0]; 
+    assign bits[511:0]   = vlc512_cat[527:16];
+    assign mask[510:0]   = vlc512_cat[1039:528];
+    
+    //////////
+    // DONE
+    //////////
 endmodule
+
+// Concatenate 2 VLC's
+module vlc_cat
+#(
+    MAX_LEN_ABCAT = 32,
+    MAX_LEN_A  = 32,
+    MAX_LEN_B  = 32, 
+    I_BIT_LEN = 32,
+    I_CNT_LEN = 8,
+    O_BIT_LEN = 32,
+    O_CNT_LEN = 32,
+    I_LEN = I_BIT_LEN+I_BIT_LEN+I_CNT_LEN,
+    O_LEN = O_BIT_LEN+O_BIT_LEN+O_CNT_LEN
+)
+(
+    output logic [O_LEN-1:0] abcat,
+    input  logic [I_LEN-1:0] a,
+    input  logic [I_LEN-1:0] b
+);
+    assign abcat[O_LEN-1:0] = 72'b0;
+endmodule
+
+
 
 module table_9_10_run_before
 (
