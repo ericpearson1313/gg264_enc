@@ -628,7 +628,7 @@ module gg_process
     logic [71:0] vlc32_cat[15];
     logic [135:0] vlc64_cat[9];
     logic [263:0] vlc128_cat[5];
-    logic [527:0] vlc256_cat[4];
+    logic [519:0] vlc256_cat[4];
     logic [1039:0] vlc512_cat;
     
     vlc_cat #( 13, 11, 10, 32, 8, 32, 8 ) cat_00_ ( .abcat(  vlc32_cat[ 0] ), .a(  vlc32_run_before[ 0]          ), .b( vlc32_run_before[ 1]          ) );
@@ -660,11 +660,11 @@ module gg_process
     vlc_cat #(112, 56, 56, 64, 8,128, 8 ) cat_26_ ( .abcat( vlc128_cat[ 2] ), .a(  vlc64_cat[ 4]                 ), .b( vlc64_cat[ 5]                 ) );
     vlc_cat #(112, 56, 56, 64, 8,128, 8 ) cat_27_ ( .abcat( vlc128_cat[ 3] ), .a(  vlc64_cat[ 6]                 ), .b( vlc64_cat[ 7]                 ) );
     vlc_cat #( 58, 58,  0, 64, 8,128, 8 ) cat_28_ ( .abcat( vlc128_cat[ 4] ), .a(  vlc64_cat[ 8]                 ), .b(        136'b0                 ) );
-    vlc_cat #(215,103,112,128, 8,256,16 ) cat_29_ ( .abcat( vlc256_cat[ 0] ), .a( vlc128_cat[ 0]                 ), .b( vlc128_cat[ 1]                ) );
-    vlc_cat #(224,112,112,128, 8,256,16 ) cat_30_ ( .abcat( vlc256_cat[ 1] ), .a( vlc128_cat[ 2]                 ), .b( vlc128_cat[ 3]                ) );
-    vlc_cat #( 58, 58,  0,128, 8,256,16 ) cat_31_ ( .abcat( vlc256_cat[ 2] ), .a( vlc128_cat[ 4]                 ), .b(         264'b0                ) );
-    vlc_cat #(282,224, 58,256,16,256,16 ) cat_32_ ( .abcat( vlc256_cat[ 3] ), .a( vlc256_cat[ 1]                 ), .b( vlc256_cat[ 2]                ) );
-    vlc_cat #(497,215,282,256,16,512,16 ) cat_33_ ( .abcat( vlc512_cat     ), .a( vlc256_cat[ 0]                 ), .b( vlc256_cat[ 3]                ) );
+    vlc_cat #(215,103,112,128, 8,256, 8 ) cat_29_ ( .abcat( vlc256_cat[ 0] ), .a( vlc128_cat[ 0]                 ), .b( vlc128_cat[ 1]                ) );
+    vlc_cat #(224,112,112,128, 8,256, 8 ) cat_30_ ( .abcat( vlc256_cat[ 1] ), .a( vlc128_cat[ 2]                 ), .b( vlc128_cat[ 3]                ) );
+    vlc_cat #( 58, 58,  0,128, 8,256, 8 ) cat_31_ ( .abcat( vlc256_cat[ 2] ), .a( vlc128_cat[ 4]                 ), .b(         264'b0                ) );
+    vlc_cat #(282,224, 58,256, 8,256, 8 ) cat_32_ ( .abcat( vlc256_cat[ 3] ), .a( vlc256_cat[ 1]                 ), .b( vlc256_cat[ 2]                ) );
+    vlc_cat #(497,215,282,256, 8,512,16 ) cat_33_ ( .abcat( vlc512_cat     ), .a( vlc256_cat[ 0]                 ), .b( vlc256_cat[ 3]                ) );
    
     // Assign outputs
     
@@ -680,22 +680,76 @@ endmodule
 // Concatenate 2 VLC's
 module vlc_cat
 #(
-    MAX_LEN_ABCAT = 32,
-    MAX_LEN_A  = 32,
-    MAX_LEN_B  = 32, 
-    I_BIT_LEN = 32,
-    I_CNT_LEN = 8,
-    O_BIT_LEN = 32,
-    O_CNT_LEN = 32,
-    I_LEN = I_BIT_LEN+I_BIT_LEN+I_CNT_LEN,
-    O_LEN = O_BIT_LEN+O_BIT_LEN+O_CNT_LEN
+    // Required
+    QMAX = 30,
+    AMAX  = 27,
+    BMAX  = 12,
+    // Default 
+    ABITS = 32,
+    ACNT = 8,
+    QBITS = 32,
+    QCNT = 8, 
+    // Calculated
+    BBITS = ABITS,
+    BCNT = ACNT,
+    APORT = ABITS*2+ACNT,
+    BPORT = BBITS*2+BCNT,
+    QPORT = QBITS*2+QCNT
 )
 (
-    output logic [O_LEN-1:0] abcat,
-    input  logic [I_LEN-1:0] a,
-    input  logic [I_LEN-1:0] b
+    output logic [QPORT-1:0] abcat,
+    input  logic [APORT-1:0] a,
+    input  logic [BPORT-1:0] b
 );
-    assign abcat[O_LEN-1:0] = 72'b0;
+    localparam int SH_ADDR_WIDTH = $clog2( BMAX );
+    
+    logic [511:0] dout, mout, ad, am;
+    logic [8:0] shift;
+    
+    // Only drive the shift, data, mask bits required, otherwise 0 for synth const propagation and removal
+    always_comb begin
+        shift[8:0] = 9'b0;
+        ad[511:0] = 512'd0; 
+        am[511:0] = 512'd0;
+        shift[SH_ADDR_WIDTH-1:0] = b[SH_ADDR_WIDTH-1:0];
+        am[AMAX-1:0] = a[AMAX+ACNT-1:ACNT];
+        ad[AMAX-1:0] = a[AMAX+ACNT+ABITS-1:ACNT+ABITS];
+    end
+    
+    logic [511:0] barrel[10];
+    
+    always_comb begin
+        for( int ii = 0; ii < 512; ii++ ) begin
+            barrel[0][ii*2+1 +: 2]  = { ad[ii], am[ii] };
+            barrel[1][ii*2+1 +: 2]  = ( shift[8] ) ? (( ii >= 256 ) ? barrel[0][(ii-256)*2+1 +: 2] : 2'b00 ) : barrel[0][ii*2+1 +: 2];
+            barrel[2][ii*2+1 +: 2]  = ( shift[7] ) ? (( ii >= 128 ) ? barrel[1][(ii-128)*2+1 +: 2] : 2'b00 ) : barrel[1][ii*2+1 +: 2];
+            barrel[3][ii*2+1 +: 2]  = ( shift[6] ) ? (( ii >=  64 ) ? barrel[2][(ii- 64)*2+1 +: 2] : 2'b00 ) : barrel[2][ii*2+1 +: 2];
+            barrel[4][ii*2+1 +: 2]  = ( shift[5] ) ? (( ii >=  32 ) ? barrel[3][(ii- 32)*2+1 +: 2] : 2'b00 ) : barrel[3][ii*2+1 +: 2];
+            barrel[5][ii*2+1 +: 2]  = ( shift[4] ) ? (( ii >=  16 ) ? barrel[4][(ii- 16)*2+1 +: 2] : 2'b00 ) : barrel[4][ii*2+1 +: 2];
+            barrel[6][ii*2+1 +: 2]  = ( shift[3] ) ? (( ii >=   8 ) ? barrel[5][(ii-  8)*2+1 +: 2] : 2'b00 ) : barrel[5][ii*2+1 +: 2];
+            barrel[7][ii*2+1 +: 2]  = ( shift[2] ) ? (( ii >=   4 ) ? barrel[6][(ii-  4)*2+1 +: 2] : 2'b00 ) : barrel[6][ii*2+1 +: 2];
+            barrel[8][ii*2+1 +: 2]  = ( shift[1] ) ? (( ii >=   2 ) ? barrel[7][(ii-  2)*2+1 +: 2] : 2'b00 ) : barrel[7][ii*2+1 +: 2];
+            barrel[9][ii*2+1 +: 2]  = ( shift[0] ) ? (( ii >=   1 ) ? barrel[8][(ii-  1)*2+1 +: 2] : 2'b00 ) : barrel[8][ii*2+1 +: 2];
+            { dout[ii], mout[ii] } = barrel[9][ii*2+1 +: 2];
+        end
+    end    
+    
+    always_comb begin
+        abcat[QCNT-1:0] = {{(QCNT-ACNT){1'b0}}, ACNT[ACNT-1:0] } + {{(QCNT-BCNT){1'b0}}, BCNT[ACNT-1:0]};
+        for( int ii = 0; ii < QBITS; ii++ ) begin
+            if( ii >= QMAX ) begin
+                abcat[ii+QCNT] = 1'b0; // mask
+                abcat[ii+QCNT+QBITS] = 1'b0; // data
+            end else if ( ii >= AMAX ) begin // no A data 
+                abcat[ii+QCNT] = mout[ii];
+                abcat[ii+QCNT+QBITS] = dout[ii];
+            end else begin // A data direct, or muxed B data.
+                abcat[ii+QCNT]       = ( b[ii+QCNT] ) ? b[ii+QCNT]       : mout[ii]; // mask
+                abcat[ii+QCNT+QBITS] = ( b[ii+QCNT] ) ? b[ii+QCNT+QBITS] : dout[ii]; // data
+            end
+        end 
+    end
+    
 endmodule
 
 
