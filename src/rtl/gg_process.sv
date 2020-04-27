@@ -678,6 +678,7 @@ module gg_process
 endmodule
 
 // Concatenate 2 VLC's
+// A 512 bit concatenate is reasonable assuming logic reduciton by synth tool (validate!)
 module vlc_cat
 #(
     // Required
@@ -720,17 +721,17 @@ module vlc_cat
     
     always_comb begin
         for( int ii = 0; ii < 512; ii++ ) begin
-            barrel[0][ii*2+1 +: 2]  = { ad[ii], am[ii] };
-            barrel[1][ii*2+1 +: 2]  = ( shift[8] ) ? (( ii >= 256 ) ? barrel[0][(ii-256)*2+1 +: 2] : 2'b00 ) : barrel[0][ii*2+1 +: 2];
-            barrel[2][ii*2+1 +: 2]  = ( shift[7] ) ? (( ii >= 128 ) ? barrel[1][(ii-128)*2+1 +: 2] : 2'b00 ) : barrel[1][ii*2+1 +: 2];
-            barrel[3][ii*2+1 +: 2]  = ( shift[6] ) ? (( ii >=  64 ) ? barrel[2][(ii- 64)*2+1 +: 2] : 2'b00 ) : barrel[2][ii*2+1 +: 2];
-            barrel[4][ii*2+1 +: 2]  = ( shift[5] ) ? (( ii >=  32 ) ? barrel[3][(ii- 32)*2+1 +: 2] : 2'b00 ) : barrel[3][ii*2+1 +: 2];
-            barrel[5][ii*2+1 +: 2]  = ( shift[4] ) ? (( ii >=  16 ) ? barrel[4][(ii- 16)*2+1 +: 2] : 2'b00 ) : barrel[4][ii*2+1 +: 2];
-            barrel[6][ii*2+1 +: 2]  = ( shift[3] ) ? (( ii >=   8 ) ? barrel[5][(ii-  8)*2+1 +: 2] : 2'b00 ) : barrel[5][ii*2+1 +: 2];
-            barrel[7][ii*2+1 +: 2]  = ( shift[2] ) ? (( ii >=   4 ) ? barrel[6][(ii-  4)*2+1 +: 2] : 2'b00 ) : barrel[6][ii*2+1 +: 2];
-            barrel[8][ii*2+1 +: 2]  = ( shift[1] ) ? (( ii >=   2 ) ? barrel[7][(ii-  2)*2+1 +: 2] : 2'b00 ) : barrel[7][ii*2+1 +: 2];
-            barrel[9][ii*2+1 +: 2]  = ( shift[0] ) ? (( ii >=   1 ) ? barrel[8][(ii-  1)*2+1 +: 2] : 2'b00 ) : barrel[8][ii*2+1 +: 2];
-            { dout[ii], mout[ii] } = barrel[9][ii*2+1 +: 2];
+            barrel[0][ii*2 +: 2]  = { ad[ii], am[ii] };
+            barrel[1][ii*2 +: 2]  = ( shift[8] ) ? (( ii >= 256 ) ? barrel[0][(ii-256)*2 +: 2] : 2'b00 ) : barrel[0][ii*2 +: 2];
+            barrel[2][ii*2 +: 2]  = ( shift[7] ) ? (( ii >= 128 ) ? barrel[1][(ii-128)*2 +: 2] : 2'b00 ) : barrel[1][ii*2 +: 2];
+            barrel[3][ii*2 +: 2]  = ( shift[6] ) ? (( ii >=  64 ) ? barrel[2][(ii- 64)*2 +: 2] : 2'b00 ) : barrel[2][ii*2 +: 2];
+            barrel[4][ii*2 +: 2]  = ( shift[5] ) ? (( ii >=  32 ) ? barrel[3][(ii- 32)*2 +: 2] : 2'b00 ) : barrel[3][ii*2 +: 2];
+            barrel[5][ii*2 +: 2]  = ( shift[4] ) ? (( ii >=  16 ) ? barrel[4][(ii- 16)*2 +: 2] : 2'b00 ) : barrel[4][ii*2 +: 2];
+            barrel[6][ii*2 +: 2]  = ( shift[3] ) ? (( ii >=   8 ) ? barrel[5][(ii-  8)*2 +: 2] : 2'b00 ) : barrel[5][ii*2 +: 2];
+            barrel[7][ii*2 +: 2]  = ( shift[2] ) ? (( ii >=   4 ) ? barrel[6][(ii-  4)*2 +: 2] : 2'b00 ) : barrel[6][ii*2 +: 2];
+            barrel[8][ii*2 +: 2]  = ( shift[1] ) ? (( ii >=   2 ) ? barrel[7][(ii-  2)*2 +: 2] : 2'b00 ) : barrel[7][ii*2 +: 2];
+            barrel[9][ii*2 +: 2]  = ( shift[0] ) ? (( ii >=   1 ) ? barrel[8][(ii-  1)*2 +: 2] : 2'b00 ) : barrel[8][ii*2 +: 2];
+            { dout[ii], mout[ii] } = barrel[9][ii*2 +: 2];
         end
     end    
     
