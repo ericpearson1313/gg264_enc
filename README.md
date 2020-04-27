@@ -19,13 +19,13 @@ The runtime cost of $1.65/hr is affordable for hobbyist development. The 'F1 pro
 FPGA development tools are available at $0 additional cost, provided as an AMI to when creating new EC2 instances.
 
 ### EC2 Instances Emmployed
-f1.2xlarge - $1.65/hr - FPGA runtime instance
-r5.xlarge - $0.25/hr - Full chip FPGA synthesis 
-r5.large - - $0.12/hr - Interactive block level synthesis sessions for $1/day
+- f1.2xlarge - $1.65/hr - FPGA runtime instance
+- r5.xlarge - $0.25/hr - Full chip FPGA synthesis 
+- r5.large - - $0.12/hr - Interactive block level synthesis sessions for $1/day
 
 ## Specifications
 
-See my talk on WebVC and Open source hardware [talk](doc/webvc_talk_jan2020.pdf]
+See my talk on WebVC and Open source hardware: [doc/webvc_talk_jan2020.pdf](doc/webvc_talk_jan2020.pdf]
 for my intitial thoughts.
 
 Since then I've been reducing the minimum hardware feature set for a first working version, 
