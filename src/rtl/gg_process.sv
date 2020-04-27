@@ -302,6 +302,40 @@ module gg_process
 	//	}
 	//}
 
+	/////////////////////////////////////////
+	// Distortion & Recon
+	////////////////////////////////////////
+
+    logic [15:0] res[16];
+    logic [9:0] recon_pre_clip[16];
+    logic [8:0] rdiff[16];
+    logic [7:0] rabs[16];
+    logic [19:0] rsqr[16];
+
+    always_comb begin
+        // Reconstruct
+        for( int ii = 0; ii < 16; ii++ ) begin
+            recon_pre_clip[ii][15:0] = { {1{res[ii][14]}}, res[ii][14:0] } + { 4'b0, pred[ii][11:0] };
+            recon[ii][7:0] = ( recon_pre_clip[ii][15] ) ? 8'h00 : ( recon_pre_clip[ii][14:8] ) ? 8'hFF : recon_pre_clip[ii][7:0];
+        end
+        // Measure Reconstruction Distortion
+        sad[11:0] = 12'b0;
+        ssd[19:0] = 20'b0;
+        for( int ii = 0; ii < 16; ii++ ) begin
+            rdiff[ii] = { 1'b0, recon[ii] } - { 1'b0, orig[ii] };
+            rabs[ii] = ( rdiff[ii][8] ) ? (~rdiff[ii][7:0] + 1) : rdiff[ii][7:0];
+            rsqr[ii][19:0] = { 4'b0000, rabs[ii][7:0] * rabs[ii][7:0] };
+        end
+        // Sum Distortions
+        ssd[19:0] =(( rsqr[ 0] + rsqr[ 1] ) + ( rsqr[ 2] + rsqr[ 3] ) +
+                    ( rsqr[ 4] + rsqr[ 5] ) + ( rsqr[ 4] + rsqr[ 5] )) +
+                   (( rsqr[ 8] + rsqr[ 9] ) + ( rsqr[10] + rsqr[11] ) +
+                    ( rsqr[12] + rsqr[13] ) + ( rsqr[14] + rsqr[15] ));
+        sad[11:0] =(( { 4'b0, rabs[ 0] } + { 4'b0, rabs[ 1] } ) + ( { 4'b0, rabs[ 2] } + { 4'b0, rabs[ 3] } ) +
+                    ( { 4'b0, rabs[ 4] } + { 4'b0, rabs[ 5] } ) + ( { 4'b0, rabs[ 4] } + { 4'b0, rabs[ 5] } )) +
+                   (( { 4'b0, rabs[ 8] } + { 4'b0, rabs[ 9] } ) + ( { 4'b0, rabs[10] } + { 4'b0, rabs[11] } ) +
+                    ( { 4'b0, rabs[12] } + { 4'b0, rabs[13] } ) + ( { 4'b0, rabs[14] } + { 4'b0, rabs[15] } ));
+    end
 
 	//////////////////////////////////////////
 	//////////////////////////////////////////
@@ -623,7 +657,7 @@ module gg_process
         end
     end                               
 
-    // VLC Concatenation
+    // Bit Funnel Tree, VLC Concatenation
     
     logic [71:0] vlc32_cat[15];
     logic [135:0] vlc64_cat[9];
@@ -666,7 +700,7 @@ module gg_process
     vlc_cat #(282,224, 58,256, 8,256, 8 ) cat_32_ ( .abcat( vlc256_cat[ 3] ), .a( vlc256_cat[ 1]                 ), .b( vlc256_cat[ 2]                ) );
     vlc_cat #(497,215,282,256, 8,512,16 ) cat_33_ ( .abcat( vlc512_cat     ), .a( vlc256_cat[ 0]                 ), .b( vlc256_cat[ 3]                ) );
    
-    // Assign outputs
+    // Assign rate outputs
     
     assign bitcount[9:0] = vlc512_cat[9:0]; 
     assign bits[511:0]   = vlc512_cat[527:16];
