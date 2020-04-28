@@ -43,9 +43,12 @@ module gg_process
     input wire abv_out_of_pic,
     input wire left_out_of_pic,
     input wire [3:0][7:0] abv_nc,
-    output logic [3:0][7:0] below_nc
+    output logic [3:0][7:0] below_nc,
+    output logic [6:0] overflow
     );
-    
+ 
+ 
+
     // Flags
 	wire dc_flag = ( cidx[2:0] == 4 || cidx[2:0] == 5 || cidx[2:0] == 6) ? 1'b1 : 1'b0;
 	wire ac_flag = ( cidx[2:0] == 1 || cidx[2:0] == 2 || cidx[2:0] == 3) ? 1'b1 : 1'b0;
@@ -186,14 +189,21 @@ module gg_process
                                    /*( qpdiv6[3:0] == 4'd8 )*/ { 8'b0, quant_shift1[ii][25:8] } ;
             quant_ofs[ii][26:0] = { 1'b0, quant_shift2[ii][25:0] } + { 19'd0, offset[7:0] };
             quant_dz[ii][18:0]  = ( quant_ofs[ii][26:0] > { 11'd0, deadzone[15:0] } ) ? quant_ofs[ii][26:8] : 0;
-            // Note: max encodable coeff, in general is -2063 to 2063 (suffix len = 0 or 1), 
-            // larger ranges for suffix lenths 2,3,4,5,6 , up to +/-480
-            // should bypass as PCM, and/or clip the values if too large. Flag this for sure.
-            quant_clip[ii][11:0] = ( quant_dz[ii][18:0] > 19'd2063 ) ? 12'd2063 : quant_dz[ii][11:0]; 
-            coeff[ii][12:0]     = ( negcoeff[ii] ) ? ~quant_clip[ii][11:0] + 1 : quant_clip[ii][11:0];
+            // Note: max encodable coeff, in general is -2063 to 2063 (suffix len = 0 or 1), but up to +/-2528 with suffix lenth 6
+            // Do a quick clip here to fit the coeff and let coeff coding take care of exact flagging.
+            // Upon error should bypass as PCM, and/or requant the block as coeffs are too large, or just accept clipping.
+            quant_clip[ii][11:0] = ( quant_dz[ii][18:0] > 19'hFFF ) ? 12'hFFF : quant_dz[ii][11:0]; 
+            coeff[ii][12:0]     = ( negcoeff[ii] ) ? { 1'b1, ~quant_clip[ii][11:0] + 1 } : { 1'b0, quant_clip[ii][11:0] };
         end
     end
-
+   
+    // Flag coeff overflow, coeff to large for prefix 15. 
+    always_comb begin
+        overflow[0] = 0;
+        for( int ii = 0; ii < 16; ii++ ) begin
+            overflow[0] |= |quant_dz[ii][18:12];
+        end
+    end
 
 	//////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////////////////////////////////////////////////////////////
@@ -208,8 +218,8 @@ module gg_process
 	/////////////////////////////////////////
 
     logic [0:5][4:0] dvmat0, dvmat1, dvmat2;
-    logic [13:0] dvm0, dvm1, dvm2;
-    logic [0:15][13:0] dquant;
+    logic [4:0] dvm0, dvm1, dvm2;
+    logic [0:15][4:0] dquant;
     assign dvmat0 = { 5'd10, 5'd11, 5'd13, 5'd14, 5'd16, 5'd18 };
     assign dvmat1 = { 5'd16, 5'd18, 5'd20, 5'd23, 5'd25, 5'd29 };
     assign dvmat2 = { 5'd13, 5'd14, 5'd16, 5'd18, 5'd20, 5'd23 };
@@ -221,95 +231,88 @@ module gg_process
                       { dvm0, dvm2, dvm0, dvm2 }, 
                       { dvm2, dvm1, dvm2, dvm1 } };
 
-    logic [25:0] f[16];
 
 
-	//int dequant;
-	//int coeff_dc;
-	//if (dc_flag) { // Just copy DC coeff, will be quanted later along with AC
-	//	if (ch_flag) { // sub-sample coeffs for ch dc
-	//		for (int ii = 0; ii < 16; f[ii++] = 0);
-	//		f[0] = coeff[0];
-	//		f[2] = coeff[1];
-	//		f[8] = coeff[4];
-	//		f[10] = coeff[5];
-	//	}
-	//	else { // copy all coeff unquantized
-	//		for (int ii = 0; ii < 16; ii++) {
-	//			f[ii] = coeff[ii];
-	//		}
-	//	}
-	//}
-	
+    reg [15:0] dc_hold [2][16];
+
+    logic [28:0] f[16];
+    logic signed [24:0] dprod[16]; // 13 bit signed coeff * 5+4 bit quant
+    logic signed [24:0] dpofs[16]; // with rounding offset
+    logic signed [15:0] dcoeff[16];
+
     always_comb begin
         if( dc_flag ) begin // if DC coeff, defer quant until AC, just copy
             if( ch_flag ) begin // relocate chroma DC and zero remainder
                 for( int ii = 0; ii < 16; ii++ ) begin
-                    f[ii] = 0;
+                    f[ii] = 29'd0;
                 end
-                f[0] = coeff[0];
-                f[2] = coeff[1];
-                f[8] = coeff[4];
-                f[10] = coeff[5];
+                f[ 0][28:0] = { 16'b0, coeff[0][12:0] };
+                f[ 2][28:0] = { 16'b0, coeff[1][12:0] };
+                f[ 8][28:0] = { 16'b0, coeff[4][12:0] };
+                f[10][28:0] = { 16'b0, coeff[5][12:0] };
             end else begin // just copy thru luma DC
                 for( int ii = 0; ii < 16; ii++ ) begin
-                    f[ii] = 0;
+                    f[ii][28:0] = { 16'b0, coeff[ii][12:0] };
                 end
             end 
-        end 
-        
-
-	
-	//else { // Inverse quant 4x4, with special scaling for DC coeff when appropriate
-	//	for (int ii = 0; ii < 16; ii++) { 
-	//		if (ii == 0 && ac_flag && ch_flag) { // Handle Chroma dc coeff
-	//			dequant = 16 * Dmat[qp % 6][0][0];
-	//			coeff_dc = dc_hold[((bidx&1)<<0)+((bidx&2)<<1)]; // sample 0,1,4,5
-	//			f[0] = ((coeff_dc * dequant) << (qp / 6)) >> 5;
-	//		}
-	//		else if (ii == 0 && ac_flag) { // Intra 16 dc coeff
-	//			dequant = 16 * Dmat[qp % 6][0][0];
-	//			coeff_dc = dc_hold[((bidx & 1) << 0) + ((bidx & 2) << 1) + ((bidx & 4) >> 1) + ((bidx & 8) << 0)];
-	//			if (qp >= 36) {
-	//				f[0] = (coeff_dc * dequant) << (qp / 6 - 6);
-	//			}
-	//			else { // qp < 36
-	//				f[0] = (coeff_dc * dequant + (1 << (5 - qp / 6))) >> (6 - qp / 6);
-	//			}
-	//		}
-	//		else { // normal 4x4 quant
-	//			dequant = 16 * Dmat[qp % 6][ii >> 2][ii & 3];
-	//			if (qp >= 24) {
-	//				f[ii] = (coeff[ii] * dequant) << (qp / 6 - 4);
-	//			}
-	//			else { // qp < 24
-	//				f[ii] = (coeff[ii] * dequant + (1 << (3 - qp / 6))) >> (4 - qp / 6);
-	//			}
-	//		}
-	//	}
-	//}
-
-        else begin // Inverse quant
+        end else begin // Inverse quant the ac coeffs, bring in the inverse DC
             for( int ii = 0; ii < 16; ii++ ) begin
-                if( ii == 0 && ac_flag && ch_flag ) begin // get chroma DC from dc hold
-                
-                end else if ( ii == 0 && ac_flag ) begin // get luma dc from dc hold
-                
+                dcoeff[ii][15:0] = ( ii == 0 && ac_flag && cr_flag ) ? dc_hold[2][{ 1'b0, bidx[1], 1'b0, bidx[0] }][15:0] : // sample 0,1,4,5
+                                   ( ii == 0 && ac_flag && cb_flag ) ? dc_hold[1][{ 1'b0, bidx[1], 1'b0, bidx[0] }][15:0] : // sample 0,1,4,5
+                                   ( ii == 0 && ac_flag &&  y_flag ) ? dc_hold[0][bidx[3:0]][15:0] : // luma dc coeff
+                                                                       { {3{coeff[ii][12]}}, coeff[ii][12:0] }; // regular coeff
+                dprod[ii][24:0] = dcoeff[ii][15:0] * { dquant[ii][4:0], 4'b0000 };
+                dpofs[ii][24:0] = dprod[ii][24:0] + 
+                                 (( ii == 0 && ac_flag && qpdiv6 == 0 ) ? 25'h20:
+                                  ( ii == 0 && ac_flag && qpdiv6 == 1 ) ? 25'h10:
+                                  ( ii == 0 && ac_flag && qpdiv6 == 2 ) ? 25'h8:
+                                  ( ii == 0 && ac_flag && qpdiv6 == 3 ) ? 25'h4:
+                                  ( ii == 0 && ac_flag && qpdiv6 == 4 ) ? 25'h2:
+                                  ( ii == 0 && ac_flag && qpdiv6 == 5 ) ? 25'h1:
+                                  (                       qpdiv6 == 0 ) ? 25'h8:
+                                  (                       qpdiv6 == 1 ) ? 25'h4:
+                                  (                       qpdiv6 == 2 ) ? 25'h2:
+                                /*(                       qpdiv6 == 3 )*/ 25'h1 );
+                                  
+                if( ii == 0 && ac_flag && ch_flag ) begin // get chroma DC from dc hold and iquant 
+                    f[0] =  ( qpdiv6 == 0 ) ? { {9{dprod[0][24]}}, dprod[0][24:5]       }:
+                            ( qpdiv6 == 1 ) ? { {8{dprod[0][24]}}, dprod[0][24:4]       }:
+                            ( qpdiv6 == 2 ) ? { {7{dprod[0][24]}}, dprod[0][24:3]       }:
+                            ( qpdiv6 == 3 ) ? { {4{dprod[0][24]}}, dprod[0][24:2]       }:
+                            ( qpdiv6 == 4 ) ? { {5{dprod[0][24]}}, dprod[0][24:1]       }:
+                            ( qpdiv6 == 5 ) ? { {4{dprod[0][24]}}, dprod[0][24:0]       }:
+                            ( qpdiv6 == 6 ) ? { {3{dprod[0][24]}}, dprod[0][24:0], 1'b0 }:
+                            ( qpdiv6 == 7 ) ? { {2{dprod[0][24]}}, dprod[0][24:0], 2'b0 }:
+                          /*( qpdiv6 == 8 )*/ { {1{dprod[0][24]}}, dprod[0][24:0], 3'b0 };                            
+                end else if ( ii == 0 && ac_flag ) begin // get luma dc from dc hold and iquant
+                    f[0] =  ( qpdiv6 == 0 ) ? {{10{dpofs[0][24]}}, dpofs[0][24:6]       }:
+                            ( qpdiv6 == 1 ) ? { {9{dpofs[0][24]}}, dpofs[0][24:5]       }:
+                            ( qpdiv6 == 2 ) ? { {8{dpofs[0][24]}}, dpofs[0][24:4]       }:
+                            ( qpdiv6 == 3 ) ? { {7{dpofs[0][24]}}, dpofs[0][24:3]       }:
+                            ( qpdiv6 == 4 ) ? { {6{dpofs[0][24]}}, dpofs[0][24:2]       }:
+                            ( qpdiv6 == 5 ) ? { {5{dpofs[0][24]}}, dpofs[0][24:1]       }:
+                            ( qpdiv6 == 6 ) ? { {4{dprod[0][24]}}, dprod[0][24:0]       }:
+                            ( qpdiv6 == 7 ) ? { {3{dprod[0][24]}}, dprod[0][24:0], 1'b0 }:
+                          /*( qpdiv6 == 8 )*/ { {2{dprod[0][24]}}, dprod[0][24:0], 2'b0 };                            
                 end else begin // normal 4x4 quant
-                    if( qp >= 24 ) begin // shift left
-                    end else begin // qp < 24 - shift right
-                    end
-                end
+                    f[ii] = ( qpdiv6 == 0 ) ? { {8{dpofs[ii][24]}}, dpofs[ii][24:4]       }:
+                            ( qpdiv6 == 1 ) ? { {7{dpofs[ii][24]}}, dpofs[ii][24:3]       }:
+                            ( qpdiv6 == 2 ) ? { {6{dpofs[ii][24]}}, dpofs[ii][24:2]       }:
+                            ( qpdiv6 == 3 ) ? { {5{dpofs[ii][24]}}, dpofs[ii][24:1]       }:
+                            ( qpdiv6 == 4 ) ? { {4{dprod[ii][24]}}, dprod[ii][24:0]       }:
+                            ( qpdiv6 == 5 ) ? { {3{dprod[ii][24]}}, dprod[ii][24:0], 1'b0 }:
+                            ( qpdiv6 == 6 ) ? { {2{dprod[ii][24]}}, dprod[ii][24:0], 2'b0 }:
+                            ( qpdiv6 == 7 ) ? { {1{dprod[ii][24]}}, dprod[ii][24:0], 3'b0 }:
+                          /*( qpdiv6 == 8 )*/ {                    dprod[ii][24:0], 4'b0 };                            
+            end
             end
         end
     end
 	
 
-
 	/////////////////////////////////////////
 	// Inverse Transform (f->res)
 	/////////////////////////////////////////
-
 
     logic [16:0] g[16];
     logic [16:0] h[16];
@@ -344,31 +347,41 @@ module gg_process
             m[col + 4 * 3][16:0] = {    k[col + 4 * 0][15]  , k[col + 4 * 0][15:0] } -               {    k[col + 4 * 3][15]  ,  k[col + 4 * 3][15:0] } ;
         end    
     end
-	
+
 
     // check for normative overflows.
 
     logic [4:0] f_overflow;
 
     always_comb begin
-        f_overflow[4:0] = 0;
+        f_overflow[5:1] = 0;
         for ( int ii = 0; ii < 16; ii++ ) begin
-            f_overflow[0] = f_overflow[0] | ~( (~(|f[ii][25:15])) | (&f[ii][25:15]) );
-            f_overflow[1] = f_overflow[1] |  ( g[ii][16] ^ g[ii][15] );
-            f_overflow[2] = f_overflow[2] |  ( h[ii][16] ^ h[ii][15] );
-            f_overflow[3] = f_overflow[3] |  ( k[ii][16] ^ k[ii][15] );
-            f_overflow[4] = f_overflow[4] |  ( m[ii][16] ^ m[ii][15] );
+            f_overflow[1] = f_overflow[1] | ~( (~(|f[ii][28:15])) | (&f[ii][28:15]) );
+            f_overflow[2] = f_overflow[2] |  (     g[ii][16] ^ g[ii][15] );
+            f_overflow[3] = f_overflow[3] |  (     h[ii][16] ^ h[ii][15] );
+            f_overflow[4] = f_overflow[4] |  (     k[ii][16] ^ k[ii][15] );
+            f_overflow[5] = f_overflow[5] |  (     m[ii][16] ^ m[ii][15] );
         end
     end
 
 	// Save transformed DC values for later combination and quantization
 
-	//if (dc_flag) { // save results to DC hold
-	//	for (int ii = 0; ii < 16; ii++) {
-	//		dc_hold[ii] = m[ii]; // save away inverse transformed DC for following AC
-	//	}
-	//}
-	
+    always_ff @(posedge clk) begin
+        if( dc_flag ) begin
+            for( int ii = 0; ii < 16; ii++ ) begin
+                if( y_flag ) begin
+                    dc_hold[0][ii][15:0] <= m[ii][15:0];
+                end
+                if( cb_flag ) begin
+                    dc_hold[1][ii][15:0] <= m[ii][15:0];
+                end
+                if( cr_flag ) begin
+                    dc_hold[2][ii][15:0] <= m[ii][15:0];
+                end
+            end
+        end
+    end
+    
 	// construct residual samples
 
     logic [16:0] pre_sh_res[16];
@@ -558,15 +571,16 @@ module gg_process
                 left_y_nc_reg[ { bidx[3], bidx[1] } ] = num_coeff[4:0];
                 abv_y_nc_reg[  { bidx[2], bidx[1] } ] = num_coeff[4:0];
             end else if ( cb_flag ) begin
-                left_y_nc_reg[ bidx[0] ] = num_coeff[4:0];
-                abv_y_nc_reg[  bidx[1] ] = num_coeff[4:0];
+                left_cb_nc_reg[ bidx[0] ] = num_coeff[4:0];
+                abv_cb_nc_reg[  bidx[1] ] = num_coeff[4:0];
             end else begin // cr flag
-                left_y_nc_reg[ bidx[0] ] = num_coeff[4:0];
-                abv_y_nc_reg[  bidx[1] ] = num_coeff[4:0];
+                left_cr_nc_reg[ bidx[0] ] = num_coeff[4:0];
+                abv_cr_nc_reg[  bidx[1] ] = num_coeff[4:0];
             end
         end
     end
-   
+
+
 	//////////////////////////////////////////
 	// Syntax Element: Total zeros
 	//////////////////////////////////////////
@@ -682,12 +696,21 @@ module gg_process
     // prefix+suffix vlc code coefficients
     logic [71:0] vlc32_prefix_suffix_coeff[16];
     logic [6:0][12:0] p15_thresh = { 13'd960, 13'd480, 13'd240, 13'd120, 13'd 60, 13'd30, 13'd30 }; 
+    logic [15:0] p15_suffix_diff[16];
     logic [14:0][15:0] mask_tbl = { 16'h7FFF, 16'h3FFF, 16'h1FFF, 16'hFFF, 16'h7FF, 16'h3FF, 16'h1FF, 16'hFF, 16'h7F, 16'h3F, 16'h1F, 16'hF, 16'h7, 16'h3, 16'h1 };
     always_comb begin
+        overflow[6] = 0;
         for( int ii = 0; ii < 16; ii++ ) begin
             if( !enc_coeff[ii] ) begin
                 vlc32_prefix_suffix_coeff[ii] = { 32'h0, 32'h0, 8'd0 };
+            end else if ( level_code[ii][12:0] >= ( p15_thresh[suffix_length[ii+1]][12:0] + 13'd4096 ) ) begin
+                overflow[6] |= 1'b1; // Mark this as an overflow error
+                vlc32_prefix_suffix_coeff[ii][ 7: 0] = 8'd28; // Length = 28 = 15 + 1 + 12
+                vlc32_prefix_suffix_coeff[ii][39: 8] = 32'hFFF_FFFF; // mask
+                vlc32_prefix_suffix_coeff[ii][51:40] = { 12'hFFE, level_code[ii][0] }; // clip with correct odd/even sign 
+                vlc32_prefix_suffix_coeff[ii][71:52] = 20'b1; // end of prefix bits
             end else if ( level_code[ii] >= p15_thresh[suffix_length[ii+1]] ) begin // prefix = 15 coding
+                overflow[6] |= ( level_code[ii][12:0] - p15_thresh[suffix_length[ii+1]][12:0] >= 13'hFFF ) ? 1'b1 : 1'b0;
                 vlc32_prefix_suffix_coeff[ii][ 7: 0] = 8'd28; // Length = 28 = 15 + 1 + 12
                 vlc32_prefix_suffix_coeff[ii][39: 8] = 32'hFFF_FFFF; // mask
                 vlc32_prefix_suffix_coeff[ii][51:40] = 13'hFFF & (level_code[ii][12:0] - p15_thresh[suffix_length[ii+1]][12:0]); 
