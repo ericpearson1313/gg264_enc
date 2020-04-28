@@ -31,7 +31,10 @@ for my intitial thoughts.
 Since then I've been reducing the minimum hardware feature set for a first working version, 
 where the video encoder can be run at realtime to measure performance and latency.
 
-I believe that minimal hardware is centered around a fully featured transform block encoder.
+### Core Process module
+A minimal hardware enocder, with the maximum potential, is centered around a transform block rate-distortion process encoder.
+This is where hardware development will start. This process module will be intially implementented and verified as combinatorial logic.
+Synthesis results will give area and timing. Timing and area optimization is next, after which, the design will be pipelined to increase its throughput.
 
 
 ## Planning

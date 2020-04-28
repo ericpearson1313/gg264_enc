@@ -163,20 +163,11 @@ module gg_process
 	logic [26:0] quant_ofs[16];
 	logic [18:0] quant_dz[16];
 	logic [11:0] quant_clip[16];
-	logic [19:0] coeff[16];
+	logic signed [19:0] coeff[16];
 
- 	// // Forward quant 16 coeffs
-	// for (int ii = 0; ii < 16; ii++) {
-	// 	abscoeff = (e[ii] < 0) ? -e[ii] : e[ii]; // remove the sign, so we round down towards zero using >>
-	// 	negcoeff = (e[ii] < 0) ? 1 : 0; // we will restore the sign after quantization
-	// 	quant = (dc_flag) ? Qmat[qp % 6][0][0] : Qmat[qp % 6][ii >> 2][ii & 3];
-	// 	qshift = (qp / 6) + ((dc_flag & !ch_flag) ? 9 : (dc_flag && ch_flag) ? 8 : 7);
-	// 	qc = ((abscoeff * quant) >> qshift ) + offset; // 8 fractional bits still remain, larger dc shift
-	// 	qcdz = (qc < deadzone) ? 0 : (qc >> 8);
-	// 	coeff[ii] = (negcoeff) ? -qcdz : qcdz;
-	// }	
+ 	// Forward quant 16 coeffs
 	
-   always_comb begin
+    always_comb begin
         for( int ii = 0; ii < 16; ii++ ) begin
             negcoeff[ii]       =   e[18];
             abscoeff[ii][18:0] = ( e[18] ) ? ( ~e[ii][18:0] + 19'd1 ) : e[ii][18:0];
@@ -216,6 +207,23 @@ module gg_process
 	// Inverse Quant (coeff->f)
 	/////////////////////////////////////////
 
+    logic [0:5][4:0] dvmat0, dvmat1, dvmat2;
+    logic [13:0] dvm0, dvm1, dvm2;
+    logic [0:15][13:0] dquant;
+    assign dvmat0 = { 5'd10, 5'd11, 5'd13, 5'd14, 5'd16, 5'd18 };
+    assign dvmat1 = { 5'd16, 5'd18, 5'd20, 5'd23, 5'd25, 5'd29 };
+    assign dvmat2 = { 5'd13, 5'd14, 5'd16, 5'd18, 5'd20, 5'd23 };
+    assign dvm0 = dvmat0[ qpmod6 ];
+    assign dvm1 = dvmat1[ qpmod6 ];
+    assign dvm2 = dvmat2[ qpmod6 ];
+    assign dquant = { { dvm0, dvm2, dvm0, dvm2 }, 
+                      { dvm2, dvm1, dvm2, dvm1 }, 
+                      { dvm0, dvm2, dvm0, dvm2 }, 
+                      { dvm2, dvm1, dvm2, dvm1 } };
+
+    logic [25:0] f[16];
+
+
 	//int dequant;
 	//int coeff_dc;
 	//if (dc_flag) { // Just copy DC coeff, will be quanted later along with AC
@@ -232,6 +240,26 @@ module gg_process
 	//		}
 	//	}
 	//}
+	
+    always_comb begin
+        if( dc_flag ) begin // if DC coeff, defer quant until AC, just copy
+            if( ch_flag ) begin // relocate chroma DC and zero remainder
+                for( int ii = 0; ii < 16; ii++ ) begin
+                    f[ii] = 0;
+                end
+                f[0] = coeff[0];
+                f[2] = coeff[1];
+                f[8] = coeff[4];
+                f[10] = coeff[5];
+            end else begin // just copy thru luma DC
+                for( int ii = 0; ii < 16; ii++ ) begin
+                    f[ii] = 0;
+                end
+            end 
+        end 
+        
+
+	
 	//else { // Inverse quant 4x4, with special scaling for DC coeff when appropriate
 	//	for (int ii = 0; ii < 16; ii++) { 
 	//		if (ii == 0 && ac_flag && ch_flag) { // Handle Chroma dc coeff
@@ -261,53 +289,105 @@ module gg_process
 	//	}
 	//}
 
+        else begin // Inverse quant
+            for( int ii = 0; ii < 16; ii++ ) begin
+                if( ii == 0 && ac_flag && ch_flag ) begin // get chroma DC from dc hold
+                
+                end else if ( ii == 0 && ac_flag ) begin // get luma dc from dc hold
+                
+                end else begin // normal 4x4 quant
+                    if( qp >= 24 ) begin // shift left
+                    end else begin // qp < 24 - shift right
+                    end
+                end
+            end
+        end
+    end
+	
+
+
 	/////////////////////////////////////////
 	// Inverse Transform (f->res)
 	/////////////////////////////////////////
 
-    // assert f[16] shall fit in 16 bit signed.
+
+    logic [16:0] g[16];
+    logic [16:0] h[16];
+    logic [16:0] k[16];
+    logic [16:0] m[16];
     
-	//for (int row = 0; row < 4; row++) {// row 1d transforms
-	//	g[0] = f[row * 4 + 0] + f[row * 4 + 2];
-	//	g[1] = f[row * 4 + 0] - f[row * 4 + 2];
-	//	g[2] = (f[row * 4 + 1] >> ((dc_flag)?0:1)) - f[row * 4 + 3];
-	//	g[3] = f[row * 4 + 1] + (f[row * 4 + 3] >> ((dc_flag) ? 0 : 1));
-	//	h[row * 4 + 0] = g[0] + g[3]; // 0+2+1+3
-	//	h[row * 4 + 1] = g[1] + g[2]; // 0-2+1-3
-	//	h[row * 4 + 2] = g[1] - g[2]; // 0-2-1+3
-	//	h[row * 4 + 3] = g[0] - g[3]; // 0+2-1-3
-	//}
-	//// assert g[4], h[16] in 16bit signed
-    //
-	//for (int col = 0; col < 4; col++) {// col 1d transforms
-	//	k[0] = h[col + 4 * 0] + h[col + 4 * 2];
-	//	k[1] = h[col + 4 * 0] - h[col + 4 * 2];
-	//	k[2] = (h[col + 4 * 1] >> ((dc_flag) ? 0 : 1)) - h[col + 4 * 3];
-	//	k[3] = h[col + 4 * 1] + (h[col + 4 * 3] >> ((dc_flag) ? 0 : 1));
-	//	m[col + 4 * 0] = k[0] + k[3];
-	//	m[col + 4 * 1] = k[1] + k[2];
-	//	m[col + 4 * 2] = k[1] - k[2];
-	//	m[col + 4 * 3] = k[0] - k[3];
-	//}
-	//// assert k[16], m[4] in 16 bits
-    //
+    always_comb begin
+        for (int row = 0; row < 4; row++) begin // row 1d transforms
+            g[row * 4 + 0][16:0] = {    f[row * 4 + 0][15]  , f[row * 4 + 0][15:0] } +               {    f[row * 4 + 2][15]  ,  f[row * 4 + 2][15:0] } ;
+            g[row * 4 + 1][16:0] = {    f[row * 4 + 0][15]  , f[row * 4 + 0][15:0] } -               {    f[row * 4 + 2][15]  ,  f[row * 4 + 2][15:0] } ;
+            g[row * 4 + 2][16:0] = ( ( dc_flag ) ? 
+                                   {    f[row * 4 + 1][15]  , f[row * 4 + 1][15:0] } :
+                                   { {2{f[row * 4 + 1][15]}}, f[row * 4 + 1][15:1] })-               {    f[row * 4 + 3][15]  ,  f[row * 4 + 3][15:0] } ;
+            g[row * 4 + 3][16:0] = {    f[row * 4 + 1][15]  , f[row * 4 + 1][15:0] } - ( dc_flag ) ? {    f[row * 4 + 3][15]  ,  f[row * 4 + 3][15:0] } :
+                                                                                                     { {2{f[row * 4 + 3][15]}},  f[row * 4 + 3][15:1] } ;
+            h[row * 4 + 0][16:0] = {    g[row * 4 + 0][15]  , g[row * 4 + 0][15:0] } +               {    g[row * 4 + 3][15]  ,  g[row * 4 + 3][15:0] } ;
+            h[row * 4 + 1][16:0] = {    g[row * 4 + 1][15]  , g[row * 4 + 1][15:0] } +               {    g[row * 4 + 2][15]  ,  g[row * 4 + 2][15:0] } ;
+            h[row * 4 + 2][16:0] = {    g[row * 4 + 1][15]  , g[row * 4 + 1][15:0] } -               {    g[row * 4 + 2][15]  ,  g[row * 4 + 2][15:0] } ;
+            h[row * 4 + 3][16:0] = {    g[row * 4 + 0][15]  , g[row * 4 + 0][15:0] } -               {    g[row * 4 + 3][15]  ,  g[row * 4 + 3][15:0] } ;
+        end
+        for (int col = 0; col < 4; col++) begin // col 1d transforms
+            k[col + 4 * 0][16:0] = {    h[col + 4 * 0][15]  , h[col + 4 * 0][15:0] } +               {    h[col + 4 * 2][15]  ,  h[col + 4 * 2][15:0] } ;
+            k[col + 4 * 1][16:0] = {    h[col + 4 * 0][15]  , h[col + 4 * 0][15:0] } -               {    h[col + 4 * 2][15]  ,  h[col + 4 * 2][15:0] } ;
+            k[col + 4 * 2][16:0] = ( ( dc_flag ) ?  
+                                   {    h[col + 4 * 1][15]  , h[col + 4 * 1][15:0] } :
+                                   { {2{h[col + 4 * 1][15]}}, h[col + 4 * 1][15:1] })-               {    h[col + 4 * 3][15]  ,  h[col + 4 * 3][15:0] } ;
+            k[col + 4 * 3][16:0] = {    h[col + 4 * 1][15]  , h[col + 4 * 1][15:0] } - ( dc_flag ) ? {    h[col + 4 * 3][15]  ,  h[col + 4 * 3][15:0] } :
+                                                                                                     { {2{h[col + 4 * 3][15]}},  h[col + 4 * 3][15:1] } ;
+            m[col + 4 * 0][16:0] = {    k[col + 4 * 0][15]  , k[col + 4 * 0][15:0] } +               {    k[col + 4 * 3][15]  ,  k[col + 4 * 3][15:0] } ;
+            m[col + 4 * 1][16:0] = {    k[col + 4 * 1][15]  , k[col + 4 * 1][15:0] } +               {    k[col + 4 * 2][15]  ,  k[col + 4 * 2][15:0] } ;
+            m[col + 4 * 2][16:0] = {    k[col + 4 * 1][15]  , k[col + 4 * 1][15:0] } -               {    k[col + 4 * 2][15]  ,  k[col + 4 * 2][15:0] } ;
+            m[col + 4 * 3][16:0] = {    k[col + 4 * 0][15]  , k[col + 4 * 0][15:0] } -               {    k[col + 4 * 3][15]  ,  k[col + 4 * 3][15:0] } ;
+        end    
+    end
+	
+
+    // check for normative overflows.
+
+    logic [4:0] f_overflow;
+
+    always_comb begin
+        f_overflow[4:0] = 0;
+        for ( int ii = 0; ii < 16; ii++ ) begin
+            f_overflow[0] = f_overflow[0] | ~( (~(|f[ii][25:15])) | (&f[ii][25:15]) );
+            f_overflow[1] = f_overflow[1] |  ( g[ii][16] ^ g[ii][15] );
+            f_overflow[2] = f_overflow[2] |  ( h[ii][16] ^ h[ii][15] );
+            f_overflow[3] = f_overflow[3] |  ( k[ii][16] ^ k[ii][15] );
+            f_overflow[4] = f_overflow[4] |  ( m[ii][16] ^ m[ii][15] );
+        end
+    end
+
+	// Save transformed DC values for later combination and quantization
+
 	//if (dc_flag) { // save results to DC hold
 	//	for (int ii = 0; ii < 16; ii++) {
 	//		dc_hold[ii] = m[ii]; // save away inverse transformed DC for following AC
 	//	}
 	//}
-	//else { // Luma / Chroma 4x4 transform
-	//	for (int ii = 0; ii < 16; ii++) {
-	//		res[ii] = (m[ii] + 32) >> 6;
-	//	}
-	//}
+	
+	// construct residual samples
+
+    logic [16:0] pre_sh_res[16];
+    logic [10:0] res[16];
+
+    always_comb begin
+        for( int ii = 0; ii < 16; ii++ ) begin
+            pre_sh_res[ii][16:0]= { 1'b0, m[ii][15:0] } + 17'd32;
+            res[ii][10:0] = pre_sh_res[ii][16:6];
+        end
+    end
+    
 
 	/////////////////////////////////////////
-	// Distortion & Recon
+	// Recon and Distortion
 	////////////////////////////////////////
 
-    logic [15:0] res[16];
-    logic [9:0] recon_pre_clip[16];
+
+    logic [12:0] recon_pre_clip[16];
     logic [8:0] rdiff[16];
     logic [7:0] rabs[16];
     logic [19:0] rsqr[16];
@@ -315,12 +395,10 @@ module gg_process
     always_comb begin
         // Reconstruct
         for( int ii = 0; ii < 16; ii++ ) begin
-            recon_pre_clip[ii][15:0] = { {1{res[ii][14]}}, res[ii][14:0] } + { 4'b0, pred[ii][11:0] };
-            recon[ii][7:0] = ( recon_pre_clip[ii][15] ) ? 8'h00 : ( recon_pre_clip[ii][14:8] ) ? 8'hFF : recon_pre_clip[ii][7:0];
+            recon_pre_clip[ii][12:0] = { {2{res[ii][10]}}, res[ii][10:0] } + { 1'b0, pred[ii][11:0] };
+            recon[ii][7:0] = ( recon_pre_clip[ii][12] ) ? 8'h00 : ( |recon_pre_clip[ii][11:8] ) ? 8'hFF : recon_pre_clip[ii][7:0];
         end
         // Measure Reconstruction Distortion
-        sad[11:0] = 12'b0;
-        ssd[19:0] = 20'b0;
         for( int ii = 0; ii < 16; ii++ ) begin
             rdiff[ii] = { 1'b0, recon[ii] } - { 1'b0, orig[ii] };
             rabs[ii] = ( rdiff[ii][8] ) ? (~rdiff[ii][7:0] + 1) : rdiff[ii][7:0];
