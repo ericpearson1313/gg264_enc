@@ -48,7 +48,13 @@ It is sufficient, for now, to provides a means to functionally bring up the tran
 (full verification is something else, and requires effort and rigor to acheive)
 
 ### Design
-In progress: Design and RTL for the transform block rate-distortion process module. Written in System Verilog with syntax checking provided in Vivado IDE.
+RTL has been written for the transform block rate-distortion process module. 
+System Verilog was used with syntax checking provided in Vivado IDE 2018.3 running on desktop.
+
+### Synthesis
+Next Step: interactive Vivado 2019.2 on AWS EC2 r5.large instance starting from FPGA Developer AMI AMI v1.8.0.
+- first step, get the instance up an running with GUI.
+
 
 
 
