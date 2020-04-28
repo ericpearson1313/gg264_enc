@@ -42,8 +42,12 @@ module gg_process
     output logic [4:0] num_coeff, // Count of non-zero block coeffs
     input wire abv_out_of_pic,
     input wire left_out_of_pic,
-    input wire [3:0][7:0] abv_nc,
-    output logic [3:0][7:0] below_nc,
+    input wire [3:0][7:0] above_nc_y,
+    input wire [1:0][7:0] above_nc_cb,
+    input wire [1:0][7:0] above_nc_cr,
+    output logic [3:0][7:0] below_nc_y,
+    output logic [1:0][7:0] below_nc_cb,
+    output logic [1:0][7:0] below_nc_cr,
     output logic [6:0] overflow
     );
  
@@ -522,12 +526,13 @@ module gg_process
     
     logic [71:0] vlc32_coeff_token;
     logic [2:0] coeff_idx;
-    logic [4:0] na, nb, nc;
+    logic [7:0] na, nb;
+    logic [4:0] nc;
     logic [5:0] nab;
     
-    reg [4:0] left_y_nc_reg[4], abv_y_nc_reg[4];
-    reg [4:0] left_cb_nc_reg[2], abv_cb_nc_reg[2];
-    reg [4:0] left_cr_nc_reg[2], abv_cr_nc_reg[2];
+    reg [3:0][7:0] left_y_nc_reg, abv_y_nc_reg;
+    reg [1:0][7:0] left_cb_nc_reg, abv_cb_nc_reg;
+    reg [1:0][7:0] left_cr_nc_reg, abv_cr_nc_reg;
     
     assign na = ( cb_flag && dc_flag ) ? left_cb_nc_reg[0] :
                 ( cr_flag && dc_flag ) ? left_cr_nc_reg[0] :
@@ -536,12 +541,15 @@ module gg_process
                 ( cr_flag            ) ? left_cr_nc_reg[ bidx[1] ] :
                                          left_y_nc_reg[ { bidx[3], bidx[1] } ];
                               
-    assign nb = ( cb_flag && dc_flag ) ? abv_cb_nc_reg[0] :
-                ( cr_flag && dc_flag ) ? abv_cr_nc_reg[0] :
-                (  y_flag && dc_flag ) ? abv_y_nc_reg[0] :
-                ( cb_flag            ) ? abv_cb_nc_reg[ bidx[0] ] :
-                ( cr_flag            ) ? abv_cr_nc_reg[ bidx[0] ] :
-                                         abv_y_nc_reg[ { bidx[2], bidx[0] } ];
+    assign nb = ( cb_flag && dc_flag  ) ? above_nc_cb[0] : // DC always before AC, use external above
+                ( cr_flag && dc_flag  ) ? above_nc_cr[0] :
+                (  y_flag && dc_flag  ) ? above_nc_y[ 0] :
+                ( cb_flag && !bidx[1] ) ? above_nc_cb[   bidx[0] ] :
+                ( cb_flag             ) ? abv_cb_nc_reg[ bidx[0] ] :
+                ( cr_flag && !bidx[1] ) ? above_nc_cr[   bidx[0] ] :
+                ( cr_flag             ) ? abv_cr_nc_reg[ bidx[0] ] :
+                ( !bidx[1] && !bidx[3]) ? above_nc_y[   { bidx[2], bidx[0] } ] :
+                                          abv_y_nc_reg[ { bidx[2], bidx[0] } ];
 
     assign nab[5:0] = { 1'b0, na[4:0] } + { 1'b0, nb[4:0] } + 6'd1;
     
@@ -580,6 +588,11 @@ module gg_process
         end
     end
 
+    // Assign below nC output.
+    assign below_nc_y = abv_y_nc_reg;
+    assign below_nc_cb = abv_cb_nc_reg;
+    assign below_nc_cr = abv_cr_nc_reg;
+    
 
 	//////////////////////////////////////////
 	// Syntax Element: Total zeros
