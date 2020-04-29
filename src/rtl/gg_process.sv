@@ -355,16 +355,14 @@ module gg_process
 
     // check for normative overflows.
 
-    logic [4:0] f_overflow;
-
     always_comb begin
-        f_overflow[5:1] = 0;
+        overflow[5:1] = 0;
         for ( int ii = 0; ii < 16; ii++ ) begin
-            f_overflow[1] = f_overflow[1] | ~( (~(|f[ii][28:15])) | (&f[ii][28:15]) );
-            f_overflow[2] = f_overflow[2] |  (     g[ii][16] ^ g[ii][15] );
-            f_overflow[3] = f_overflow[3] |  (     h[ii][16] ^ h[ii][15] );
-            f_overflow[4] = f_overflow[4] |  (     k[ii][16] ^ k[ii][15] );
-            f_overflow[5] = f_overflow[5] |  (     m[ii][16] ^ m[ii][15] );
+            overflow[1] |= ~( (~(|f[ii][28:15])) | (&f[ii][28:15]) );
+            overflow[2] |=  (     g[ii][16] ^ g[ii][15] );
+            overflow[3] |=  (     h[ii][16] ^ h[ii][15] );
+            overflow[4] |=  (     k[ii][16] ^ k[ii][15] );
+            overflow[5] |=  (     m[ii][16] ^ m[ii][15] );
         end
     end
 
@@ -497,7 +495,7 @@ module gg_process
         end
         t1_count[16] = 2'd0;
         for( int ii = 15; ii >= 0; ii-- ) begin // need to stop at first scan coeff > 1
-            t1_count[ii] = ( ii = 15 )             ? { 1'b0, one_flag[15] } :
+            t1_count[ii] = ( ii == 15 )             ? { 1'b0, one_flag[15] } :
                            ( t1_count[ii+1] == 3 ) ?   2'd3 : 
                            ( !gt1_flag[ii] )       ? ( t1_count[ii+1] + { 1'b0, one_flag[ii] } ) : 
                                                        t1_count[ii+1];
@@ -693,9 +691,9 @@ module gg_process
     logic [4:0] sig_count[17];
     always_comb begin
         sig_count[16] = 5'd0;
-        for( int ii = 15; ii >= 0; ii++ ) begin
+        for( int ii = 15; ii >= 0; ii-- ) begin
             sig_count[ii][4:0] = sig_count[ii+1][4:0] + { 4'b0000, sig_coeff_flag[ii] }; 
-            special_coeff[ii] = ( sig_count[ii+1] == { 3'b000, trailing_ones[ii+1][1:0] } ) ? 1'b1 : 1'b0;
+            special_coeff[ii] = ( sig_count[ii+1] == { 3'b000, trailing_ones[1:0] } ) ? 1'b1 : 1'b0;
         end
         for( int ii = 0; ii < 16; ii++ ) begin
             if( !enc_coeff[ii] ) begin
@@ -816,7 +814,7 @@ module gg_process
    
     // Assign rate outputs
     
-    assign bitcount[9:0] = vlc512_cat[9:0]; 
+    assign bitcount[8:0] = vlc512_cat[8:0]; 
     assign bits[511:0]   = vlc512_cat[527:16];
     assign mask[510:0]   = vlc512_cat[1039:528];
     
@@ -860,12 +858,12 @@ module vlc_cat
         shift[8:0] = 9'b0;
         ad[511:0] = 512'd0; 
         am[511:0] = 512'd0;
-        shift[SH_ADDR_WIDTH-1:0] = b[SH_ADDR_WIDTH-1:0];
+        shift[8:0] = b[BCNT-1:0]; // pad extend zeros
         am[AMAX-1:0] = a[AMAX+ACNT-1:ACNT];
         ad[AMAX-1:0] = a[AMAX+ACNT+ABITS-1:ACNT+ABITS];
     end
     
-    logic [511:0] barrel[10];
+    logic [1023:0] barrel[10];
     
     always_comb begin
         for( int ii = 0; ii < 512; ii++ ) begin
