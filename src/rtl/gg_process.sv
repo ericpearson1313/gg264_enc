@@ -776,8 +776,8 @@ module gg_process
     logic [71:0] vlc32_cat[15];
     logic [135:0] vlc64_cat[9];
     logic [263:0] vlc128_cat[5];
-    logic [519:0] vlc256_cat[3];
-    logic [1039:0] vlc512_cat[2];
+    logic [519:0] vlc256_cat[2];
+    logic [1039:0] vlc512_cat[3];
     
     vlc_cat #( 13, 11, 10, 32, 8, 32, 8 ) cat_00_ ( .abcat(  vlc32_cat[ 0] ), .a(  vlc32_run_before[ 0]          ), .b( vlc32_run_before[ 1]          ) );
     vlc_cat #( 11,  9,  8, 32, 8, 32, 8 ) cat_01_ ( .abcat(  vlc32_cat[ 1] ), .a(  vlc32_run_before[ 2]          ), .b( vlc32_run_before[ 3]          ) );
@@ -808,17 +808,17 @@ module gg_process
     vlc_cat #(112, 56, 56, 64, 8,128, 8 ) cat_26_ ( .abcat( vlc128_cat[ 2] ), .a(  vlc64_cat[ 4]                 ), .b( vlc64_cat[ 5]                 ) );
     vlc_cat #(112, 56, 56, 64, 8,128, 8 ) cat_27_ ( .abcat( vlc128_cat[ 3] ), .a(  vlc64_cat[ 6]                 ), .b( vlc64_cat[ 7]                 ) );
     vlc_cat #( 58, 58,  0, 64, 8,128, 8 ) cat_28_ ( .abcat( vlc128_cat[ 4] ), .a(  vlc64_cat[ 8]                 ), .b(        136'b0                 ) );
-    vlc_cat #(215,103,112,128, 8,256, 8 ) cat_29_ ( .abcat( vlc256_cat[ 0] ), .a( vlc128_cat[ 0]                 ), .b( vlc128_cat[ 1]                ) );
-    vlc_cat #(224,112,112,128, 8,256, 8 ) cat_30_ ( .abcat( vlc256_cat[ 1] ), .a( vlc128_cat[ 2]                 ), .b( vlc128_cat[ 3]                ) );
-    vlc_cat #( 58, 58,  0,128, 8,256, 8 ) cat_31_ ( .abcat( vlc256_cat[ 2] ), .a( vlc128_cat[ 4]                 ), .b(         264'b0                ) );
-    vlc_cat #(282,224, 58,256, 8,512, 8 ) cat_32_ ( .abcat( vlc512_cat[ 0] ), .a( vlc256_cat[ 1]                 ), .b( vlc256_cat[ 2]                ) );
-    vlc_cat #(497,215,282,256, 8,512,16 ) cat_33_ ( .abcat( vlc512_cat[ 1] ), .a( vlc256_cat[ 0]                 ), .b( vlc512_cat[ 0]                ) );
+    vlc_cat #(215,103,112,128, 8,512, 8 ) cat_29_ ( .abcat( vlc512_cat[ 0] ), .a( vlc128_cat[ 0]                 ), .b( vlc128_cat[ 1]                ) );
+    vlc_cat #(224,112,112,128, 8,256, 8 ) cat_30_ ( .abcat( vlc256_cat[ 0] ), .a( vlc128_cat[ 2]                 ), .b( vlc128_cat[ 3]                ) );
+    vlc_cat #( 58, 58,  0,128, 8,256, 8 ) cat_31_ ( .abcat( vlc256_cat[ 1] ), .a( vlc128_cat[ 4]                 ), .b(         264'b0                ) );
+    vlc_cat #(282,224, 58,256, 8,512, 8 ) cat_32_ ( .abcat( vlc512_cat[ 1] ), .a( vlc256_cat[ 0]                 ), .b( vlc256_cat[ 1]                ) );
+    vlc_cat #(497,215,282,512, 8,512,16 ) cat_33_ ( .abcat( vlc512_cat[ 2] ), .a( vlc512_cat[ 0]                 ), .b( vlc512_cat[ 1]                ) );
    
     // Assign rate outputs
     
-    assign bitcount[8:0] = vlc512_cat[1][8:0]; 
-    assign bits[511:0]   = vlc512_cat[1][527:16];
-    assign mask[510:0]   = vlc512_cat[1][1039:528];
+    assign bitcount[8:0] = vlc512_cat[2][8:0]; 
+    assign bits[511:0]   = vlc512_cat[2][527:16];
+    assign mask[510:0]   = vlc512_cat[2][1039:528];
     
     //////////
     // DONE
