@@ -776,8 +776,8 @@ module gg_process
     logic [71:0] vlc32_cat[15];
     logic [135:0] vlc64_cat[9];
     logic [263:0] vlc128_cat[5];
-    logic [519:0] vlc256_cat[4];
-    logic [1039:0] vlc512_cat;
+    logic [519:0] vlc256_cat[3];
+    logic [1039:0] vlc512_cat[2];
     
     vlc_cat #( 13, 11, 10, 32, 8, 32, 8 ) cat_00_ ( .abcat(  vlc32_cat[ 0] ), .a(  vlc32_run_before[ 0]          ), .b( vlc32_run_before[ 1]          ) );
     vlc_cat #( 11,  9,  8, 32, 8, 32, 8 ) cat_01_ ( .abcat(  vlc32_cat[ 1] ), .a(  vlc32_run_before[ 2]          ), .b( vlc32_run_before[ 3]          ) );
@@ -811,14 +811,14 @@ module gg_process
     vlc_cat #(215,103,112,128, 8,256, 8 ) cat_29_ ( .abcat( vlc256_cat[ 0] ), .a( vlc128_cat[ 0]                 ), .b( vlc128_cat[ 1]                ) );
     vlc_cat #(224,112,112,128, 8,256, 8 ) cat_30_ ( .abcat( vlc256_cat[ 1] ), .a( vlc128_cat[ 2]                 ), .b( vlc128_cat[ 3]                ) );
     vlc_cat #( 58, 58,  0,128, 8,256, 8 ) cat_31_ ( .abcat( vlc256_cat[ 2] ), .a( vlc128_cat[ 4]                 ), .b(         264'b0                ) );
-    vlc_cat #(282,224, 58,256, 8,256, 8 ) cat_32_ ( .abcat( vlc256_cat[ 3] ), .a( vlc256_cat[ 1]                 ), .b( vlc256_cat[ 2]                ) );
-    vlc_cat #(497,215,282,256, 8,512,16 ) cat_33_ ( .abcat( vlc512_cat     ), .a( vlc256_cat[ 0]                 ), .b( vlc256_cat[ 3]                ) );
+    vlc_cat #(282,224, 58,256, 8,512, 8 ) cat_32_ ( .abcat( vlc512_cat[ 0] ), .a( vlc256_cat[ 1]                 ), .b( vlc256_cat[ 2]                ) );
+    vlc_cat #(497,215,282,256, 8,512,16 ) cat_33_ ( .abcat( vlc512_cat[ 1] ), .a( vlc256_cat[ 0]                 ), .b( vlc512_cat[ 0]                ) );
    
     // Assign rate outputs
     
-    assign bitcount[8:0] = vlc512_cat[8:0]; 
-    assign bits[511:0]   = vlc512_cat[527:16];
-    assign mask[510:0]   = vlc512_cat[1039:528];
+    assign bitcount[8:0] = vlc512_cat[1][8:0]; 
+    assign bits[511:0]   = vlc512_cat[1][527:16];
+    assign mask[510:0]   = vlc512_cat[1][1039:528];
     
     //////////
     // DONE
@@ -888,8 +888,8 @@ module vlc_cat
                 abcat[ii+QCNT] = mout[ii];
                 abcat[ii+QCNT+QBITS] = dout[ii];
             end else begin // B data direct else shifted A data.
-                abcat[ii+QCNT]       = ( b[ii+QCNT] ) ? b[ii+QCNT]       : mout[ii]; // mask
-                abcat[ii+QCNT+QBITS] = ( b[ii+QCNT] ) ? b[ii+QCNT+QBITS] : dout[ii]; // data
+                abcat[ii+QCNT]       = ( b[ii+BCNT] ) ? b[ii+BCNT]       : mout[ii]; // mask
+                abcat[ii+QCNT+QBITS] = ( b[ii+BCNT] ) ? b[ii+BCNT+BBITS] : dout[ii]; // data
             end
         end 
     end
