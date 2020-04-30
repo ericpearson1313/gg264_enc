@@ -1,5 +1,5 @@
 # gg264_enc
-Open source verilog for a FPGA hardware WebVC/H.264 Video Encoder.
+Open source verilog for a FPGA hardware WebVC Video Encoder.
 
 (FPGA = Field Programmable Gate Array)
 
@@ -58,7 +58,7 @@ Interactive Vivado 2019.2 on AWS EC2 r5.large instance starting from FPGA Develo
  
 First synth run: Started the r5.large EC2 instance with the AMI, installed the DVC gui, and ran vivado interactively, and was able to get the process core through its first 2hr out-of-context synthesis.
 
-The 2K line log file has alot of warnings to be addressed yet.
+Synthesis itterations in progress ...
 
 
 
