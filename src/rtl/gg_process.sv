@@ -176,8 +176,8 @@ module gg_process
 	
     always_comb begin
         for( int ii = 0; ii < 16; ii++ ) begin
-            negcoeff[ii]       =   e[18];
-            abscoeff[ii][18:0] = ( e[18] ) ? ( ~e[ii][18:0] + 19'd1 ) : e[ii][18:0];
+            negcoeff[ii]       =   e[ii][18];
+            abscoeff[ii][18:0] = ( e[ii][18] ) ? ( ~e[ii][18:0] + 19'd1 ) : e[ii][18:0];
             quant_prod[ii][32:0]   = abscoeff[ii][18:0] * quant[ii][13:0];
             quant_shift1[ii][25:0] = ( !ch_flag && dc_flag ) ? { 2'b0, quant_prod[ii][32:9] } : 
                                      (  ch_flag && dc_flag ) ? { 1'b0, quant_prod[ii][32:8] } :
@@ -237,7 +237,7 @@ module gg_process
 
 
 
-    reg [15:0] dc_hold [2][16];
+    reg [15:0] dc_hold [3][16];
 
     logic [28:0] f[16];
     logic signed [24:0] dprod[16]; // 13 bit signed coeff * 5+4 bit quant
@@ -245,6 +245,24 @@ module gg_process
     logic signed [15:0] dcoeff[16];
 
     always_comb begin
+        for( int ii = 0; ii < 16; ii++ ) begin
+            dcoeff[ii][15:0] = ( ii == 0 && ac_flag && cr_flag ) ? dc_hold[2][{ 1'b0, bidx[1], 1'b0, bidx[0] }][15:0] : // sample 0,1,4,5
+                               ( ii == 0 && ac_flag && cb_flag ) ? dc_hold[1][{ 1'b0, bidx[1], 1'b0, bidx[0] }][15:0] : // sample 0,1,4,5
+                               ( ii == 0 && ac_flag &&  y_flag ) ? dc_hold[0][bidx[3:0]][15:0] : // luma dc coeff
+                                                                   { {3{coeff[ii][12]}}, coeff[ii][12:0] }; // regular coeff
+            dprod[ii][24:0] = dcoeff[ii][15:0] * { dquant[ii][4:0], 4'b0000 };
+            dpofs[ii][24:0] = dprod[ii][24:0] + 
+                             (( ii == 0 && ac_flag && qpdiv6 == 0 ) ? 25'h20:
+                              ( ii == 0 && ac_flag && qpdiv6 == 1 ) ? 25'h10:
+                              ( ii == 0 && ac_flag && qpdiv6 == 2 ) ? 25'h8:
+                              ( ii == 0 && ac_flag && qpdiv6 == 3 ) ? 25'h4:
+                              ( ii == 0 && ac_flag && qpdiv6 == 4 ) ? 25'h2:
+                              ( ii == 0 && ac_flag && qpdiv6 == 5 ) ? 25'h1:
+                              (                       qpdiv6 == 0 ) ? 25'h8:
+                              (                       qpdiv6 == 1 ) ? 25'h4:
+                              (                       qpdiv6 == 2 ) ? 25'h2:
+                            /*(                       qpdiv6 == 3 )*/ 25'h1 );         
+        end
         if( dc_flag ) begin // if DC coeff, defer quant until AC, just copy
             if( ch_flag ) begin // relocate chroma DC and zero remainder
                 for( int ii = 0; ii < 16; ii++ ) begin
@@ -261,23 +279,6 @@ module gg_process
             end 
         end else begin // Inverse quant the ac coeffs, bring in the inverse DC
             for( int ii = 0; ii < 16; ii++ ) begin
-                dcoeff[ii][15:0] = ( ii == 0 && ac_flag && cr_flag ) ? dc_hold[2][{ 1'b0, bidx[1], 1'b0, bidx[0] }][15:0] : // sample 0,1,4,5
-                                   ( ii == 0 && ac_flag && cb_flag ) ? dc_hold[1][{ 1'b0, bidx[1], 1'b0, bidx[0] }][15:0] : // sample 0,1,4,5
-                                   ( ii == 0 && ac_flag &&  y_flag ) ? dc_hold[0][bidx[3:0]][15:0] : // luma dc coeff
-                                                                       { {3{coeff[ii][12]}}, coeff[ii][12:0] }; // regular coeff
-                dprod[ii][24:0] = dcoeff[ii][15:0] * { dquant[ii][4:0], 4'b0000 };
-                dpofs[ii][24:0] = dprod[ii][24:0] + 
-                                 (( ii == 0 && ac_flag && qpdiv6 == 0 ) ? 25'h20:
-                                  ( ii == 0 && ac_flag && qpdiv6 == 1 ) ? 25'h10:
-                                  ( ii == 0 && ac_flag && qpdiv6 == 2 ) ? 25'h8:
-                                  ( ii == 0 && ac_flag && qpdiv6 == 3 ) ? 25'h4:
-                                  ( ii == 0 && ac_flag && qpdiv6 == 4 ) ? 25'h2:
-                                  ( ii == 0 && ac_flag && qpdiv6 == 5 ) ? 25'h1:
-                                  (                       qpdiv6 == 0 ) ? 25'h8:
-                                  (                       qpdiv6 == 1 ) ? 25'h4:
-                                  (                       qpdiv6 == 2 ) ? 25'h2:
-                                /*(                       qpdiv6 == 3 )*/ 25'h1 );
-                                  
                 if( ii == 0 && ac_flag && ch_flag ) begin // get chroma DC from dc hold and iquant 
                     f[0] =  ( qpdiv6 == 0 ) ? { {9{dprod[0][24]}}, dprod[0][24:5]       }:
                             ( qpdiv6 == 1 ) ? { {8{dprod[0][24]}}, dprod[0][24:4]       }:
@@ -307,7 +308,7 @@ module gg_process
                             ( qpdiv6 == 5 ) ? { {3{dprod[ii][24]}}, dprod[ii][24:0], 1'b0 }:
                             ( qpdiv6 == 6 ) ? { {2{dprod[ii][24]}}, dprod[ii][24:0], 2'b0 }:
                             ( qpdiv6 == 7 ) ? { {1{dprod[ii][24]}}, dprod[ii][24:0], 3'b0 }:
-                          /*( qpdiv6 == 8 )*/ {                    dprod[ii][24:0], 4'b0 };                            
+                          /*( qpdiv6 == 8 )*/ {                     dprod[ii][24:0], 4'b0 };                            
             end
             end
         end
@@ -373,10 +374,10 @@ module gg_process
             for( int ii = 0; ii < 16; ii++ ) begin
                 if( y_flag ) begin
                     dc_hold[0][ii][15:0] <= m[ii][15:0];
-                end
+                end else
                 if( cb_flag ) begin
                     dc_hold[1][ii][15:0] <= m[ii][15:0];
-                end
+                end else
                 if( cr_flag ) begin
                     dc_hold[2][ii][15:0] <= m[ii][15:0];
                 end
@@ -467,11 +468,12 @@ module gg_process
                     ( ( ( { 4'd0, sig_coeff_flag[ 8] } + { 4'd0, sig_coeff_flag[ 9] } ) + ( { 4'd0, sig_coeff_flag[10] } + { 4'd0, sig_coeff_flag[11] } ) )   +
                       ( ( { 4'd0, sig_coeff_flag[12] } + { 4'd0, sig_coeff_flag[13] } ) + ( { 4'd0, sig_coeff_flag[14] } + { 4'd0, sig_coeff_flag[15] } ) ) ) ;
 
-        last_coeff = 0;
-        for( int ii = 16; ii > 0; ii-- ) 
-            if( last_coeff == 0 && sig_coeff_flag[ii-1] )
-                last_coeff = ii;
-         total_zeros = last_coeff - num_coeff;
+        last_coeff[4:0] = 0;
+        for( int ii = 16; ii > 0; ii-- ) begin
+            if( last_coeff[4:0] == 0 && sig_coeff_flag[ii-1] )
+                last_coeff[4:0] = ii;
+        end        
+        total_zeros = last_coeff[4:0] - num_coeff[4:0];
     end
 
 	//////////////////////////////////////////
@@ -480,7 +482,7 @@ module gg_process
 
 
     logic [15:0] one_flag;
-    logic [15:0] gt1_flag;
+    logic [16:0] gt1_flag;
     logic [16:0][1:0] t1_count;
     logic [1:0] trailing_ones;
     logic [15:0][2:0] sign_flag;
@@ -489,9 +491,9 @@ module gg_process
         for( int ii = 0; ii < 16; ii++ ) begin
             one_flag[ii] = ( scan[ii] == 13'h1 || scan[ii] == 13'h1FFF ) ? 1'b1 : 1'b0; // abs(scan[ii])==1
         end
+        gt1_flag[16] = 1'b0;
         for( int ii = 15; ii >= 0; ii-- ) begin // flag from 1st sig coeff >= 2 
-            gt1_flag[ii] = ( ii == 15 && !one_flag[15] && scan[15] != 0 ) ? 1'b1 : 
-                           ( gt1_flag[ii+1] || ( !one_flag[ii] && scan[ii] != 0 ) ) ? 1'b1 : 1'b0;
+            gt1_flag[ii] =  ( gt1_flag[ii+1] || ( !one_flag[ii] && scan[ii] != 0 ) ) ? 1'b1 : 1'b0;
         end
         t1_count[16] = 2'd0;
         for( int ii = 15; ii >= 0; ii-- ) begin // need to stop at first scan coeff > 1
@@ -604,14 +606,14 @@ module gg_process
     (
         .num_coeff( num_coeff[1:0] ),
         .total_zeros( total_zeros[1:0] ),
-        .vlc32( vlc32_total_zeros )
+        .vlc32( vlc32_total_zeros_2x2 )
     );
 
     table_9_8_total_zeros_4x4 total_zeros_4x4_
     (
         .num_coeff( num_coeff[3:0] ),
         .total_zeros( total_zeros[3:0] ),
-        .vlc32( vlc32_total_zeros )
+        .vlc32( vlc32_total_zeros_4x4 )
     );
 
     assign vlc32_total_zeros = ( num_coeff == max_coeff || num_coeff == 0 ) ? 72'b0 :
@@ -637,7 +639,7 @@ module gg_process
                              ( first_sig_coeff[ii]       ) ? 4'd0 :
                              ( sig_coeff_flag[ii]        ) ? 4'd0 : 
                                                              (run_before[ii] + 4'd1);
-            zeros_left[ii] = ( ii == 15                  ) ? total_zeros :
+            zeros_left[ii] = ( ii == 15                  ) ? total_zeros[3:0] :
                              ( sig_coeff_flag[ii] && zeros_left[ii+1] == 4'd0 ) ? 4'd0 :
                              ( sig_coeff_flag[ii] ) ? zeros_left[ii+1] - run_before[ii] : 
                                                              run_before[ii];
@@ -675,13 +677,13 @@ module gg_process
             abs_coeff[ii] = ( scan[ii][12] ) ? ( ~scan[ii][11:0] + 12'd1 ) : scan[ii][11:0];
             enc_coeff[ii] = ( sig_coeff_flag[ii] && t1_count[ii+1][1:0] == trailing_ones[1:0] ) ? 1'b1 : 1'b0;
             suffix_length[ii] = ( !enc_coeff[ii] ) ? suffix_length[ii+1] :
-                                ( suffix_length[ii+1] == 0 && abs_coeff[ii+1][11:0] > 12'd3  ) ? 3'd2 :
+                                ( suffix_length[ii+1] == 0 && abs_coeff[ii][11:0] > 12'd3  ) ? 3'd2 :
                                 ( suffix_length[ii+1] == 0                                   ) ? 3'd1 :
-                                ( suffix_length[ii+1] == 1 && abs_coeff[ii+1][11:0] > 12'd3  ) ? 3'd2 :
-                                ( suffix_length[ii+1] == 2 && abs_coeff[ii+1][11:0] > 12'd6  ) ? 3'd3 :
-                                ( suffix_length[ii+1] == 3 && abs_coeff[ii+1][11:0] > 12'd12 ) ? 3'd4 :
-                                ( suffix_length[ii+1] == 4 && abs_coeff[ii+1][11:0] > 12'd24 ) ? 3'd5 :
-                                ( suffix_length[ii+1] == 5 && abs_coeff[ii+1][11:0] > 12'd48 ) ? 3'd2 :  3'd6 ;
+                                ( suffix_length[ii+1] == 1 && abs_coeff[ii][11:0] > 12'd3  ) ? 3'd2 :
+                                ( suffix_length[ii+1] == 2 && abs_coeff[ii][11:0] > 12'd6  ) ? 3'd3 :
+                                ( suffix_length[ii+1] == 3 && abs_coeff[ii][11:0] > 12'd12 ) ? 3'd4 :
+                                ( suffix_length[ii+1] == 4 && abs_coeff[ii][11:0] > 12'd24 ) ? 3'd5 :
+                                ( suffix_length[ii+1] == 5 && abs_coeff[ii][11:0] > 12'd48 ) ? 3'd2 :  3'd6 ;
         end
     end                               
 
@@ -850,24 +852,19 @@ module vlc_cat
 );
     localparam int SH_ADDR_WIDTH = $clog2( BMAX );
     
-    logic [511:0] dout, mout, ad, am;
+    logic [QMAX-1:0] dout, mout;
     logic [8:0] shift;
     
     // Only drive the shift, data, mask bits required, otherwise 0 for synth const propagation and removal
     always_comb begin
-        shift[8:0] = 9'b0;
-        ad[511:0] = 512'd0; 
-        am[511:0] = 512'd0;
         shift[8:0] = b[BCNT-1:0]; // pad extend zeros
-        am[AMAX-1:0] = a[AMAX+ACNT-1:ACNT];
-        ad[AMAX-1:0] = a[AMAX+ACNT+ABITS-1:ACNT+ABITS];
     end
     
-    logic [1023:0] barrel[10];
+    logic [QMAX*2-1:0] barrel[10];
     
     always_comb begin
-        for( int ii = 0; ii < 512; ii++ ) begin
-            barrel[0][ii*2 +: 2]  = { ad[ii], am[ii] };
+        for( int ii = 0; ii < QMAX; ii++ ) begin
+            barrel[0][ii*2 +: 2]  = ( ii > AMAX ) ? 2'b00 : { a[ABITS+ACNT+ii], a[ACNT+ii] };
             barrel[1][ii*2 +: 2]  = ( shift[8] ) ? (( ii >= 256 ) ? barrel[0][(ii-256)*2 +: 2] : 2'b00 ) : barrel[0][ii*2 +: 2];
             barrel[2][ii*2 +: 2]  = ( shift[7] ) ? (( ii >= 128 ) ? barrel[1][(ii-128)*2 +: 2] : 2'b00 ) : barrel[1][ii*2 +: 2];
             barrel[3][ii*2 +: 2]  = ( shift[6] ) ? (( ii >=  64 ) ? barrel[2][(ii- 64)*2 +: 2] : 2'b00 ) : barrel[2][ii*2 +: 2];
@@ -887,10 +884,10 @@ module vlc_cat
             if( ii >= QMAX ) begin
                 abcat[ii+QCNT] = 1'b0; // mask
                 abcat[ii+QCNT+QBITS] = 1'b0; // data
-            end else if ( ii >= AMAX ) begin // no A data 
+            end else if ( ii >= BMAX ) begin // no B data, just shifted A always.
                 abcat[ii+QCNT] = mout[ii];
                 abcat[ii+QCNT+QBITS] = dout[ii];
-            end else begin // A data direct, or muxed B data.
+            end else begin // B data direct else shifted A data.
                 abcat[ii+QCNT]       = ( b[ii+QCNT] ) ? b[ii+QCNT]       : mout[ii]; // mask
                 abcat[ii+QCNT+QBITS] = ( b[ii+QCNT] ) ? b[ii+QCNT+QBITS] : dout[ii]; // data
             end
@@ -908,7 +905,7 @@ module table_9_10_run_before
     output logic [71:0] vlc32
 );   
     always_comb begin
-        unique case( { zeros_left[2:0], run_before[3:0] } ) // synopsys parallel_case  
+        unique casez( { zeros_left[2:0], run_before[3:0] } )   
             { 3'd0, 4'b???? } : vlc32 = { 32'h0, 32'h0, 8'd0 }; /*str=<empty>*/
             { 3'd1, 4'd0 } : vlc32 = { 32'h1, 32'h1, 8'd1 }; /*str=1*/
             { 3'd1, 4'd1 } : vlc32 = { 32'h0, 32'h1, 8'd1 }; /*str=0*/
@@ -964,16 +961,16 @@ module table_9_9_total_zeros_2x2
     output logic [71:0] vlc32
 );   
     always_comb begin
-        unique case( { num_coeff[1:0], total_zeros[1:0] } ) // synopsys parallel_case  
+        unique case( { num_coeff[1:0], total_zeros[1:0] } )   
             { 2'd1, 2'd0 } : vlc32 = { 32'h1, 32'd1, 8'd1 }; /* str=1 */
             { 2'd1, 2'd1 } : vlc32 = { 32'h1, 32'd3, 8'd2 }; /* str=01 */
             { 2'd1, 2'd2 } : vlc32 = { 32'h1, 32'd7, 8'd3 }; /* str=001 */
             { 2'd1, 2'd3 } : vlc32 = { 32'h0, 32'd7, 8'd3 }; /* str=000 */
             { 2'd2, 2'd0 } : vlc32 = { 32'h1, 32'd1, 8'd1 }; /* str=1 */
-            { 2'd2, 2'd0 } : vlc32 = { 32'h1, 32'd3, 8'd2 }; /* str=01 */
-            { 2'd2, 2'd0 } : vlc32 = { 32'h0, 32'd3, 8'd2 }; /* str=00 */
+            { 2'd2, 2'd1 } : vlc32 = { 32'h1, 32'd3, 8'd2 }; /* str=01 */
+            { 2'd2, 2'd2 } : vlc32 = { 32'h0, 32'd3, 8'd2 }; /* str=00 */
             { 2'd3, 2'd0 } : vlc32 = { 32'h1, 32'd1, 8'd1 }; /* str=1 */
-            { 2'd3, 2'd0 } : vlc32 = { 32'h0, 32'd1, 8'd1 }; /* str=0 */
+            { 2'd3, 2'd1 } : vlc32 = { 32'h0, 32'd1, 8'd1 }; /* str=0 */
             default        : vlc32 = {72{1'bx}}; // don't care
         endcase
     end 
@@ -987,7 +984,7 @@ module table_9_8_total_zeros_4x4
     output logic [71:0] vlc32
 );   
     always_comb begin        
-        unique case( { num_coeff[3:0], total_zeros[3:0] } ) // synopsys parallel_case
+        unique case( { num_coeff[3:0], total_zeros[3:0] } ) 
             { 4'd1 , 4'd0  } : vlc32 = { 32'h1, 32'h1, 8'd1 }; /*str=1*/
             { 4'd1 , 4'd1  } : vlc32 = { 32'h3, 32'h7, 8'd3 }; /*str=011*/
             { 4'd1 , 4'd2  } : vlc32 = { 32'h2, 32'h7, 8'd3 }; /*str=010*/
@@ -1136,7 +1133,7 @@ module table_9_5_coeff_token
     output logic [71:0] vlc32 // 0:nC<2, 1:nC<4, 2:nC<8, 3:nC>=8, 4:chdc
 );   
     always_comb begin
-        unique case( { trailing_ones[1:0], num_coeff[4:0], table_idx[2:0] } )  // synopsys parallel_case
+        unique case( { trailing_ones[1:0], num_coeff[4:0], table_idx[2:0] } )  
             { 2'd0, 5'd0 , 3'd0 } : vlc32 = { 32'h1, 32'h1, 8'd1 }; /*str=1*/
             { 2'd0, 5'd0 , 3'd1 } : vlc32 = { 32'h3, 32'h3, 8'd2 }; /*str=11*/
             { 2'd0, 5'd0 , 3'd2 } : vlc32 = { 32'hF, 32'hF, 8'd4 }; /*str=1111*/
@@ -1180,10 +1177,10 @@ module table_9_5_coeff_token
             { 2'd1, 5'd10, 3'd0 } : vlc32 = { 32'hA, 32'h3FFF, 8'd14 }; /*str=00000000001010*/
             { 2'd2, 5'd10, 3'd0 } : vlc32 = { 32'hD, 32'h3FFF, 8'd14 }; /*str=00000000001101*/
             { 2'd3, 5'd10, 3'd0 } : vlc32 = { 32'hC, 32'h1FFF, 8'd13 }; /*str=0000000001100*/
-            { 2'd0, 5'd14, 3'd0 } : vlc32 = { 32'hF, 32'h7FFF, 8'd15 }; /*str=000000000001111*/
-            { 2'd1, 5'd14, 3'd0 } : vlc32 = { 32'hE, 32'h7FFF, 8'd15 }; /*str=000000000001110*/
-            { 2'd2, 5'd14, 3'd0 } : vlc32 = { 32'h9, 32'h3FFF, 8'd14 }; /*str=00000000001001*/
-            { 2'd3, 5'd14, 3'd0 } : vlc32 = { 32'hC, 32'h3FFF, 8'd14 }; /*str=00000000001100*/
+            { 2'd0, 5'd11, 3'd0 } : vlc32 = { 32'hF, 32'h7FFF, 8'd15 }; /*str=000000000001111*/
+            { 2'd1, 5'd11, 3'd0 } : vlc32 = { 32'hE, 32'h7FFF, 8'd15 }; /*str=000000000001110*/
+            { 2'd2, 5'd11, 3'd0 } : vlc32 = { 32'h9, 32'h3FFF, 8'd14 }; /*str=00000000001001*/
+            { 2'd3, 5'd11, 3'd0 } : vlc32 = { 32'hC, 32'h3FFF, 8'd14 }; /*str=00000000001100*/
             { 2'd0, 5'd12, 3'd0 } : vlc32 = { 32'hB, 32'h7FFF, 8'd15 }; /*str=000000000001011*/
             { 2'd1, 5'd12, 3'd0 } : vlc32 = { 32'hA, 32'h7FFF, 8'd15 }; /*str=000000000001010*/
             { 2'd2, 5'd12, 3'd0 } : vlc32 = { 32'hD, 32'h7FFF, 8'd15 }; /*str=000000000001101*/
