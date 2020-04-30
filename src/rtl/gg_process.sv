@@ -808,11 +808,11 @@ module gg_process
     vlc_cat #(112, 56, 56, 64, 8,128, 8 ) cat_26_ ( .abcat( vlc128_cat[ 2] ), .a(  vlc64_cat[ 4]                 ), .b( vlc64_cat[ 5]                 ) );
     vlc_cat #(112, 56, 56, 64, 8,128, 8 ) cat_27_ ( .abcat( vlc128_cat[ 3] ), .a(  vlc64_cat[ 6]                 ), .b( vlc64_cat[ 7]                 ) );
     vlc_cat #( 58, 58,  0, 64, 8,128, 8 ) cat_28_ ( .abcat( vlc128_cat[ 4] ), .a(  vlc64_cat[ 8]                 ), .b(        136'b0                 ) );
-    vlc_cat #(215,103,112,128, 8,512, 8 ) cat_29_ ( .abcat( vlc512_cat[ 0] ), .a( vlc128_cat[ 0]                 ), .b( vlc128_cat[ 1]                ) );
+    vlc_cat #(215,103,112,128, 8,512,16 ) cat_29_ ( .abcat( vlc512_cat[ 0] ), .a( vlc128_cat[ 0]                 ), .b( vlc128_cat[ 1]                ) );
     vlc_cat #(224,112,112,128, 8,256, 8 ) cat_30_ ( .abcat( vlc256_cat[ 0] ), .a( vlc128_cat[ 2]                 ), .b( vlc128_cat[ 3]                ) );
     vlc_cat #( 58, 58,  0,128, 8,256, 8 ) cat_31_ ( .abcat( vlc256_cat[ 1] ), .a( vlc128_cat[ 4]                 ), .b(         264'b0                ) );
-    vlc_cat #(282,224, 58,256, 8,512, 8 ) cat_32_ ( .abcat( vlc512_cat[ 1] ), .a( vlc256_cat[ 0]                 ), .b( vlc256_cat[ 1]                ) );
-    vlc_cat #(497,215,282,512, 8,512,16 ) cat_33_ ( .abcat( vlc512_cat[ 2] ), .a( vlc512_cat[ 0]                 ), .b( vlc512_cat[ 1]                ) );
+    vlc_cat #(282,224, 58,256, 8,512,16 ) cat_32_ ( .abcat( vlc512_cat[ 1] ), .a( vlc256_cat[ 0]                 ), .b( vlc256_cat[ 1]                ) );
+    vlc_cat #(497,215,282,512,16,512,16 ) cat_33_ ( .abcat( vlc512_cat[ 2] ), .a( vlc512_cat[ 0]                 ), .b( vlc512_cat[ 1]                ) );
    
     // Assign rate outputs
     
