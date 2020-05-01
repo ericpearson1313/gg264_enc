@@ -484,7 +484,7 @@ module gg_process
     logic [16:0] gt1_flag;
     logic [1:0] t1_count[17];
     logic [1:0] trailing_ones;
-    logic [2:0] sign_flag[16];
+    logic sign_flag[3][17];
     logic [71:0] vlc32_trailing_ones;
     always_comb begin
         for( int ii = 0; ii < 16; ii++ ) begin
@@ -496,23 +496,23 @@ module gg_process
         end
         t1_count[16] = 2'd0;
         for( int ii = 15; ii >= 0; ii-- ) begin // need to stop at first scan coeff > 1
-            t1_count[ii] = ( ii == 15 )             ? { 1'b0, one_flag[15] } :
-                           ( t1_count[ii+1] == 3 ) ?   2'd3 : 
-                           ( gt1_flag[ii] )       ? t1_count[ii+1] : ( t1_count[ii+1] + 2'b01 );
+            t1_count[ii] = ( one_flag[ii] && !gt1_flag[ii] && t1_count[ii+1] != 2'd3 ) ? ( t1_count[ii+1] + 2'd1 ) : t1_count[ii+1];
         end
         trailing_ones = t1_count[0];
+        sign_flag[0][16] = 0;
+        sign_flag[1][16] = 0;
+        sign_flag[2][16] = 0;
         for( int ii = 15; ii >= 0; ii-- ) begin
-            sign_flag[ii][0] = ( ii == 15 ) ? ( one_flag[15] & scan[15][12] ) : 
-                               ( t1_count[ii] == 2'd1 && t1_count[ii+1] == 2'd0 ) ? scan[ii][12] : sign_flag[ii+1][0];
-            sign_flag[ii][1] = ( ii == 15 ) ? 1'b0 : 
-                               ( t1_count[ii] == 2'd2 && t1_count[ii+1] == 2'd1 ) ? scan[ii][12] : sign_flag[ii+1][1];
-            sign_flag[ii][2] = ( ii == 15 || ii == 14 ) ? 1'b0 : 
-                               ( t1_count[ii] == 2'd3 && t1_count[ii+1] == 2'd2 ) ? scan[ii][12] : sign_flag[ii+1][2];
+            sign_flag[0][ii] = ( t1_count[ii] == 2'd1 && t1_count[ii+1] == 2'd0 ) ? scan[ii][12] : sign_flag[0][ii+1];
+            sign_flag[1][ii] = ( ii == 15 ) ? 1'b0 : 
+                               ( t1_count[ii] == 2'd2 && t1_count[ii+1] == 2'd1 ) ? scan[ii][12] : sign_flag[1][ii+1];
+            sign_flag[2][ii] = ( ii == 15 || ii == 14 ) ? 1'b0 : 
+                               ( t1_count[ii] == 2'd3 && t1_count[ii+1] == 2'd2 ) ? scan[ii][12] : sign_flag[2][ii+1];
         end
         vlc32_trailing_ones = ( trailing_ones == 2'd0 ) ? { 32'b0, 32'b0, 8'd0 } :
                               ( trailing_ones == 2'd1 ) ? { 31'b0, sign_flag[0][0], 32'b1, 8'd1 } :
-                              ( trailing_ones == 2'd2 ) ? { 30'b0, sign_flag[0][1:0], 32'b11, 8'd2 } :
-                            /*( trailing_ones == 2'd3 )*/ { 29'b0, sign_flag[0][2:0], 32'b111, 8'd3 }; 
+                              ( trailing_ones == 2'd2 ) ? { 30'b0, sign_flag[0][0], sign_flag[1][0], 32'b11, 8'd2 } :
+                            /*( trailing_ones == 2'd3 )*/ { 29'b0, sign_flag[0][0], sign_flag[1][0], sign_flag[2][0], 32'b111, 8'd3 }; 
     end
 
 	//////////////////////////////////////////
