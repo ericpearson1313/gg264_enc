@@ -444,7 +444,7 @@ module gg_process
     logic [15:0][12:0] scan;
     logic [4:0] max_coeff;
     logic [15:0] sig_coeff_flag;
-    logic [4:0] last_coeff_idx[16];
+    logic [4:0] last_coeff_idx[17];
     logic [4:0] total_zeros;
     
 	// int scan[16]; // dc->hf ordered coefficient list
@@ -795,12 +795,12 @@ module gg_process
     vlc_cat #( 19, 16,  3, 32, 8, 32, 8 ) cat_14_ ( .abcat(  vlc32_cat[14] ), .a(  vlc32_coeff_token             ), .b( vlc32_trailing_ones           ) );
     vlc_cat #( 47, 19, 28, 32, 8, 64, 8 ) cat_15_ ( .abcat(  vlc64_cat[ 0] ), .a(  vlc32_cat[14]                 ), .b( vlc32_prefix_suffix_coeff[15] ) );
     vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_16_ ( .abcat(  vlc64_cat[ 1] ), .a(  vlc32_prefix_suffix_coeff[14] ), .b( vlc32_prefix_suffix_coeff[13] ) );
-    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_17_ ( .abcat(  vlc64_cat[ 2] ), .a(  vlc32_prefix_suffix_coeff[12] ), .b( vlc32_prefix_suffix_coeff[13] ) );
-    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_18_ ( .abcat(  vlc64_cat[ 3] ), .a(  vlc32_prefix_suffix_coeff[10] ), .b( vlc32_prefix_suffix_coeff[13] ) );
-    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_19_ ( .abcat(  vlc64_cat[ 4] ), .a(  vlc32_prefix_suffix_coeff[ 8] ), .b( vlc32_prefix_suffix_coeff[13] ) );
-    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_20_ ( .abcat(  vlc64_cat[ 5] ), .a(  vlc32_prefix_suffix_coeff[ 6] ), .b( vlc32_prefix_suffix_coeff[13] ) );
-    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_21_ ( .abcat(  vlc64_cat[ 6] ), .a(  vlc32_prefix_suffix_coeff[ 4] ), .b( vlc32_prefix_suffix_coeff[13] ) );
-    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_22_ ( .abcat(  vlc64_cat[ 7] ), .a(  vlc32_prefix_suffix_coeff[ 2] ), .b( vlc32_prefix_suffix_coeff[13] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_17_ ( .abcat(  vlc64_cat[ 2] ), .a(  vlc32_prefix_suffix_coeff[12] ), .b( vlc32_prefix_suffix_coeff[11] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_18_ ( .abcat(  vlc64_cat[ 3] ), .a(  vlc32_prefix_suffix_coeff[10] ), .b( vlc32_prefix_suffix_coeff[9] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_19_ ( .abcat(  vlc64_cat[ 4] ), .a(  vlc32_prefix_suffix_coeff[ 8] ), .b( vlc32_prefix_suffix_coeff[7] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_20_ ( .abcat(  vlc64_cat[ 5] ), .a(  vlc32_prefix_suffix_coeff[ 6] ), .b( vlc32_prefix_suffix_coeff[5] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_21_ ( .abcat(  vlc64_cat[ 6] ), .a(  vlc32_prefix_suffix_coeff[ 4] ), .b( vlc32_prefix_suffix_coeff[3] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_22_ ( .abcat(  vlc64_cat[ 7] ), .a(  vlc32_prefix_suffix_coeff[ 2] ), .b( vlc32_prefix_suffix_coeff[1] ) );
     vlc_cat #( 58, 28, 30, 32, 8, 64, 8 ) cat_23_ ( .abcat(  vlc64_cat[ 8] ), .a(  vlc32_prefix_suffix_coeff[ 0] ), .b( vlc32_cat[13]                 ) );
     vlc_cat #(103, 47, 56, 64, 8,128, 8 ) cat_24_ ( .abcat( vlc128_cat[ 0] ), .a(  vlc64_cat[ 0]                 ), .b( vlc64_cat[ 1]                 ) );
     vlc_cat #(112, 56, 56, 64, 8,128, 8 ) cat_25_ ( .abcat( vlc128_cat[ 1] ), .a(  vlc64_cat[ 2]                 ), .b( vlc64_cat[ 3]                 ) );
@@ -849,37 +849,31 @@ module vlc_cat
     input  logic [APORT-1:0] a,
     input  logic [BPORT-1:0] b
 );
-    localparam int SH_ADDR_WIDTH = $clog2( BMAX );
     
     logic [QMAX-1:0] dout, mout;
     logic [8:0] shift;
+    logic [QMAX*2-1:0] barrel[10]; // support up to shift of 511
     
-    // Only drive the shift, data, mask bits required, otherwise 0 for synth const propagation and removal
     always_comb begin
         shift[8:0] = b[BCNT-1:0]; // pad extend zeros
-    end
-    
-    logic [QMAX*2-1:0] barrel[10];
-    
-    always_comb begin
         for( int ii = 0; ii < QMAX; ii++ ) begin
             barrel[0][ii*2 +: 2]  = ( ii > AMAX ) ? 2'b00 : { a[ABITS+ACNT+ii], a[ACNT+ii] };
-            barrel[1][ii*2 +: 2]  = ( shift[8] && ( BMAX >= 256 ) ) ? (( ii >= 256 ) ? barrel[0][(ii-256)*2 +: 2] : 2'b00 ) : barrel[0][ii*2 +: 2];
-            barrel[2][ii*2 +: 2]  = ( shift[7] && ( BMAX >= 128 ) ) ? (( ii >= 128 ) ? barrel[1][(ii-128)*2 +: 2] : 2'b00 ) : barrel[1][ii*2 +: 2];
-            barrel[3][ii*2 +: 2]  = ( shift[6] && ( BMAX >=  64 ) ) ? (( ii >=  64 ) ? barrel[2][(ii- 64)*2 +: 2] : 2'b00 ) : barrel[2][ii*2 +: 2];
-            barrel[4][ii*2 +: 2]  = ( shift[5] && ( BMAX >=  32 ) ) ? (( ii >=  32 ) ? barrel[3][(ii- 32)*2 +: 2] : 2'b00 ) : barrel[3][ii*2 +: 2];
-            barrel[5][ii*2 +: 2]  = ( shift[4] && ( BMAX >=  16 ) ) ? (( ii >=  16 ) ? barrel[4][(ii- 16)*2 +: 2] : 2'b00 ) : barrel[4][ii*2 +: 2];
-            barrel[6][ii*2 +: 2]  = ( shift[3] && ( BMAX >=   8 ) ) ? (( ii >=   8 ) ? barrel[5][(ii-  8)*2 +: 2] : 2'b00 ) : barrel[5][ii*2 +: 2];
-            barrel[7][ii*2 +: 2]  = ( shift[2] && ( BMAX >=   4 ) ) ? (( ii >=   4 ) ? barrel[6][(ii-  4)*2 +: 2] : 2'b00 ) : barrel[6][ii*2 +: 2];
-            barrel[8][ii*2 +: 2]  = ( shift[1] && ( BMAX >=   2 ) ) ? (( ii >=   2 ) ? barrel[7][(ii-  2)*2 +: 2] : 2'b00 ) : barrel[7][ii*2 +: 2];
-            barrel[9][ii*2 +: 2]  = ( shift[0] && ( BMAX >=   1 ) ) ? (( ii >=   1 ) ? barrel[8][(ii-  1)*2 +: 2] : 2'b00 ) : barrel[8][ii*2 +: 2];
+            barrel[1][ii*2 +: 2]  = ( shift[8] && ( BMAX > 256 ) ) ? (( ii >= 256 ) ? barrel[0][(ii-256)*2 +: 2] : 2'b00 ) : barrel[0][ii*2 +: 2];
+            barrel[2][ii*2 +: 2]  = ( shift[7] && ( BMAX > 128 ) ) ? (( ii >= 128 ) ? barrel[1][(ii-128)*2 +: 2] : 2'b00 ) : barrel[1][ii*2 +: 2];
+            barrel[3][ii*2 +: 2]  = ( shift[6] && ( BMAX >  64 ) ) ? (( ii >=  64 ) ? barrel[2][(ii- 64)*2 +: 2] : 2'b00 ) : barrel[2][ii*2 +: 2];
+            barrel[4][ii*2 +: 2]  = ( shift[5] && ( BMAX >  32 ) ) ? (( ii >=  32 ) ? barrel[3][(ii- 32)*2 +: 2] : 2'b00 ) : barrel[3][ii*2 +: 2];
+            barrel[5][ii*2 +: 2]  = ( shift[4] && ( BMAX >  16 ) ) ? (( ii >=  16 ) ? barrel[4][(ii- 16)*2 +: 2] : 2'b00 ) : barrel[4][ii*2 +: 2];
+            barrel[6][ii*2 +: 2]  = ( shift[3] && ( BMAX >   8 ) ) ? (( ii >=   8 ) ? barrel[5][(ii-  8)*2 +: 2] : 2'b00 ) : barrel[5][ii*2 +: 2];
+            barrel[7][ii*2 +: 2]  = ( shift[2] && ( BMAX >   4 ) ) ? (( ii >=   4 ) ? barrel[6][(ii-  4)*2 +: 2] : 2'b00 ) : barrel[6][ii*2 +: 2];
+            barrel[8][ii*2 +: 2]  = ( shift[1] && ( BMAX >   2 ) ) ? (( ii >=   2 ) ? barrel[7][(ii-  2)*2 +: 2] : 2'b00 ) : barrel[7][ii*2 +: 2];
+            barrel[9][ii*2 +: 2]  = ( shift[0] && ( BMAX >   1 ) ) ? (( ii >=   1 ) ? barrel[8][(ii-  1)*2 +: 2] : 2'b00 ) : barrel[8][ii*2 +: 2];
             { dout[ii], mout[ii] } = barrel[9][ii*2 +: 2];
         end
     end    
     
     always_comb begin
         abcat[QCNT-1:0] = ( QCNT == ACNT ) ? ( ACNT[ACNT-1:0] + BCNT[BCNT:0] ) : 
-                                             ( {{(QCNT-ACNT){1'b0}}, ACNT[ACNT-1:0] } + {{(QCNT-BCNT){1'b0}}, BCNT[ACNT-1:0]} );
+                                             ( {{(QCNT-ACNT){1'b0}}, ACNT[ACNT-1:0] } + {{(QCNT-BCNT){1'b0}}, BCNT[BCNT-1:0]} );
         for( int ii = 0; ii < QBITS; ii++ ) begin
             if( ii >= QMAX ) begin
                 abcat[ii+QCNT] = 1'b0; // mask
