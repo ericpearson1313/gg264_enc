@@ -406,7 +406,7 @@ module gg_process
     logic [12:0] recon_pre_clip[16];
     logic [8:0] rdiff[16];
     logic [7:0] rabs[16];
-    logic [19:0] rsqr[16];
+    logic [15:0] rsqr[16];
 
     always_comb begin
         // Reconstruct
@@ -416,19 +416,19 @@ module gg_process
         end
         // Measure Reconstruction Distortion
         for( int ii = 0; ii < 16; ii++ ) begin
-            rdiff[ii] = { 1'b0, recon[ii] } - { 1'b0, orig[ii] };
-            rabs[ii] = ( rdiff[ii][8] ) ? (~rdiff[ii][7:0] + 1) : rdiff[ii][7:0];
-            rsqr[ii][19:0] = { 4'b0000, rabs[ii][7:0] * rabs[ii][7:0] };
+            rdiff[ii][8:0] = { 1'b0, recon[ii] } - { 1'b0, orig[ii] };
+            rabs[ii][7:0]  = ( rdiff[ii][8] ) ? (~rdiff[ii][7:0] + 1) : rdiff[ii][7:0];
+            rsqr[ii][15:0] = rabs[ii][7:0] * rabs[ii][7:0];
         end
         // Sum Distortions
-        ssd[19:0] =(( rsqr[ 0] + rsqr[ 1] ) + ( rsqr[ 2] + rsqr[ 3] ) +
-                    ( rsqr[ 4] + rsqr[ 5] ) + ( rsqr[ 4] + rsqr[ 5] )) +
-                   (( rsqr[ 8] + rsqr[ 9] ) + ( rsqr[10] + rsqr[11] ) +
-                    ( rsqr[12] + rsqr[13] ) + ( rsqr[14] + rsqr[15] ));
-        sad[11:0] =(( { 4'b0, rabs[ 0] } + { 4'b0, rabs[ 1] } ) + ( { 4'b0, rabs[ 2] } + { 4'b0, rabs[ 3] } ) +
-                    ( { 4'b0, rabs[ 4] } + { 4'b0, rabs[ 5] } ) + ( { 4'b0, rabs[ 4] } + { 4'b0, rabs[ 5] } )) +
-                   (( { 4'b0, rabs[ 8] } + { 4'b0, rabs[ 9] } ) + ( { 4'b0, rabs[10] } + { 4'b0, rabs[11] } ) +
-                    ( { 4'b0, rabs[12] } + { 4'b0, rabs[13] } ) + ( { 4'b0, rabs[14] } + { 4'b0, rabs[15] } ));
+        ssd[19:0] =(( { 4'b0, rsqr[ 0][15:0] } + { 4'b0, rsqr[ 1][15:0] } ) + ( { 4'b0, rsqr[ 2][15:0] } + { 4'b0, rsqr[ 3][15:0] } ) +
+                    ( { 4'b0, rsqr[ 4][15:0] } + { 4'b0, rsqr[ 5][15:0] } ) + ( { 4'b0, rsqr[ 4][15:0] } + { 4'b0, rsqr[ 5][15:0] } )) +
+                   (( { 4'b0, rsqr[ 8][15:0] } + { 4'b0, rsqr[ 9][15:0] } ) + ( { 4'b0, rsqr[10][15:0] } + { 4'b0, rsqr[11][15:0] } ) +
+                    ( { 4'b0, rsqr[12][15:0] } + { 4'b0, rsqr[13][15:0] } ) + ( { 4'b0, rsqr[14][15:0] } + { 4'b0, rsqr[15][15:0] } ));
+        sad[11:0] =(( { 4'b0, rabs[ 0][ 7:0] } + { 4'b0, rabs[ 1][ 7:0] } ) + ( { 4'b0, rabs[ 2][ 7:0] } + { 4'b0, rabs[ 3][ 7:0] } ) +
+                    ( { 4'b0, rabs[ 4][ 7:0] } + { 4'b0, rabs[ 5][ 7:0] } ) + ( { 4'b0, rabs[ 4][ 7:0] } + { 4'b0, rabs[ 5][ 7:0] } )) +
+                   (( { 4'b0, rabs[ 8][ 7:0] } + { 4'b0, rabs[ 9][ 7:0] } ) + ( { 4'b0, rabs[10][ 7:0] } + { 4'b0, rabs[11][ 7:0] } ) +
+                    ( { 4'b0, rabs[12][ 7:0] } + { 4'b0, rabs[13][ 7:0] } ) + ( { 4'b0, rabs[14][ 7:0] } + { 4'b0, rabs[15][ 7:0] } ));
     end
 
 	//////////////////////////////////////////
@@ -444,7 +444,7 @@ module gg_process
     logic [15:0][12:0] scan;
     logic [4:0] max_coeff;
     logic [15:0] sig_coeff_flag;
-    logic [4:0] last_coeff;
+    logic [4:0] last_coeff_idx[16];
     logic [4:0] total_zeros;
     
 	// int scan[16]; // dc->hf ordered coefficient list
@@ -468,12 +468,11 @@ module gg_process
                     ( ( ( { 4'd0, sig_coeff_flag[ 8] } + { 4'd0, sig_coeff_flag[ 9] } ) + ( { 4'd0, sig_coeff_flag[10] } + { 4'd0, sig_coeff_flag[11] } ) )   +
                       ( ( { 4'd0, sig_coeff_flag[12] } + { 4'd0, sig_coeff_flag[13] } ) + ( { 4'd0, sig_coeff_flag[14] } + { 4'd0, sig_coeff_flag[15] } ) ) ) ;
 
-        last_coeff[4:0] = 0;
+        last_coeff_idx[16][4:0] = 0;
         for( int ii = 16; ii > 0; ii-- ) begin
-            if( last_coeff[4:0] == 0 && sig_coeff_flag[ii-1] )
-                last_coeff[4:0] = ii;
+            last_coeff_idx[ii-1] = ( last_coeff_idx[ii][4:0] == 0 && sig_coeff_flag[ii-1] ) ? ii : last_coeff_idx[ii];
         end        
-        total_zeros = last_coeff[4:0] - num_coeff[4:0];
+        total_zeros = ( num_coeff[4:0] == max_coeff[4:0] || num_coeff[4:0] == 0 ) ? 5'b0 : last_coeff_idx[0][4:0] - num_coeff[4:0];
     end
 
 	//////////////////////////////////////////
@@ -483,9 +482,9 @@ module gg_process
 
     logic [15:0] one_flag;
     logic [16:0] gt1_flag;
-    logic [16:0][1:0] t1_count;
+    logic [1:0] t1_count[17];
     logic [1:0] trailing_ones;
-    logic [15:0][2:0] sign_flag;
+    logic [2:0] sign_flag[16];
     logic [71:0] vlc32_trailing_ones;
     always_comb begin
         for( int ii = 0; ii < 16; ii++ ) begin
@@ -865,21 +864,22 @@ module vlc_cat
     always_comb begin
         for( int ii = 0; ii < QMAX; ii++ ) begin
             barrel[0][ii*2 +: 2]  = ( ii > AMAX ) ? 2'b00 : { a[ABITS+ACNT+ii], a[ACNT+ii] };
-            barrel[1][ii*2 +: 2]  = ( shift[8] ) ? (( ii >= 256 ) ? barrel[0][(ii-256)*2 +: 2] : 2'b00 ) : barrel[0][ii*2 +: 2];
-            barrel[2][ii*2 +: 2]  = ( shift[7] ) ? (( ii >= 128 ) ? barrel[1][(ii-128)*2 +: 2] : 2'b00 ) : barrel[1][ii*2 +: 2];
-            barrel[3][ii*2 +: 2]  = ( shift[6] ) ? (( ii >=  64 ) ? barrel[2][(ii- 64)*2 +: 2] : 2'b00 ) : barrel[2][ii*2 +: 2];
-            barrel[4][ii*2 +: 2]  = ( shift[5] ) ? (( ii >=  32 ) ? barrel[3][(ii- 32)*2 +: 2] : 2'b00 ) : barrel[3][ii*2 +: 2];
-            barrel[5][ii*2 +: 2]  = ( shift[4] ) ? (( ii >=  16 ) ? barrel[4][(ii- 16)*2 +: 2] : 2'b00 ) : barrel[4][ii*2 +: 2];
-            barrel[6][ii*2 +: 2]  = ( shift[3] ) ? (( ii >=   8 ) ? barrel[5][(ii-  8)*2 +: 2] : 2'b00 ) : barrel[5][ii*2 +: 2];
-            barrel[7][ii*2 +: 2]  = ( shift[2] ) ? (( ii >=   4 ) ? barrel[6][(ii-  4)*2 +: 2] : 2'b00 ) : barrel[6][ii*2 +: 2];
-            barrel[8][ii*2 +: 2]  = ( shift[1] ) ? (( ii >=   2 ) ? barrel[7][(ii-  2)*2 +: 2] : 2'b00 ) : barrel[7][ii*2 +: 2];
-            barrel[9][ii*2 +: 2]  = ( shift[0] ) ? (( ii >=   1 ) ? barrel[8][(ii-  1)*2 +: 2] : 2'b00 ) : barrel[8][ii*2 +: 2];
+            barrel[1][ii*2 +: 2]  = ( shift[8] && ( BMAX >= 256 ) ) ? (( ii >= 256 ) ? barrel[0][(ii-256)*2 +: 2] : 2'b00 ) : barrel[0][ii*2 +: 2];
+            barrel[2][ii*2 +: 2]  = ( shift[7] && ( BMAX >= 128 ) ) ? (( ii >= 128 ) ? barrel[1][(ii-128)*2 +: 2] : 2'b00 ) : barrel[1][ii*2 +: 2];
+            barrel[3][ii*2 +: 2]  = ( shift[6] && ( BMAX >=  64 ) ) ? (( ii >=  64 ) ? barrel[2][(ii- 64)*2 +: 2] : 2'b00 ) : barrel[2][ii*2 +: 2];
+            barrel[4][ii*2 +: 2]  = ( shift[5] && ( BMAX >=  32 ) ) ? (( ii >=  32 ) ? barrel[3][(ii- 32)*2 +: 2] : 2'b00 ) : barrel[3][ii*2 +: 2];
+            barrel[5][ii*2 +: 2]  = ( shift[4] && ( BMAX >=  16 ) ) ? (( ii >=  16 ) ? barrel[4][(ii- 16)*2 +: 2] : 2'b00 ) : barrel[4][ii*2 +: 2];
+            barrel[6][ii*2 +: 2]  = ( shift[3] && ( BMAX >=   8 ) ) ? (( ii >=   8 ) ? barrel[5][(ii-  8)*2 +: 2] : 2'b00 ) : barrel[5][ii*2 +: 2];
+            barrel[7][ii*2 +: 2]  = ( shift[2] && ( BMAX >=   4 ) ) ? (( ii >=   4 ) ? barrel[6][(ii-  4)*2 +: 2] : 2'b00 ) : barrel[6][ii*2 +: 2];
+            barrel[8][ii*2 +: 2]  = ( shift[1] && ( BMAX >=   2 ) ) ? (( ii >=   2 ) ? barrel[7][(ii-  2)*2 +: 2] : 2'b00 ) : barrel[7][ii*2 +: 2];
+            barrel[9][ii*2 +: 2]  = ( shift[0] && ( BMAX >=   1 ) ) ? (( ii >=   1 ) ? barrel[8][(ii-  1)*2 +: 2] : 2'b00 ) : barrel[8][ii*2 +: 2];
             { dout[ii], mout[ii] } = barrel[9][ii*2 +: 2];
         end
     end    
     
     always_comb begin
-        abcat[QCNT-1:0] = {{(QCNT-ACNT){1'b0}}, ACNT[ACNT-1:0] } + {{(QCNT-BCNT){1'b0}}, BCNT[ACNT-1:0]};
+        abcat[QCNT-1:0] = ( QCNT == ACNT ) ? ( ACNT[ACNT-1:0] + BCNT[BCNT:0] ) : 
+                                             ( {{(QCNT-ACNT){1'b0}}, ACNT[ACNT-1:0] } + {{(QCNT-BCNT){1'b0}}, BCNT[ACNT-1:0]} );
         for( int ii = 0; ii < QBITS; ii++ ) begin
             if( ii >= QMAX ) begin
                 abcat[ii+QCNT] = 1'b0; // mask
