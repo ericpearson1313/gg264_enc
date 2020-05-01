@@ -170,7 +170,7 @@ module gg_process
 	logic [26:0] quant_ofs[16];
 	logic [18:0] quant_dz[16];
 	logic [11:0] quant_clip[16];
-	logic signed [19:0] coeff[16];
+	logic signed [12:0] coeff[16];
 
  	// Forward quant 16 coeffs
 	
@@ -454,14 +454,14 @@ module gg_process
     assign max_coeff[4:0] = ( ch_flag && dc_flag ) ? 5'd4 : ( ac_flag ) ? 5'd15 : 5'd16; 
     
     assign scan = ( ch_flag && dc_flag ) ? { {12{13'd0}}, coeff[5], coeff[4], coeff[1], coeff[0] } :
-                  ( ac_flag ) ? { 13'd0    ,coeff[15],coeff[14],coeff[11],coeff[ 7],coeff[10],coeff[13],coeff[12],
+                  ( ac_flag ) ? {{1{13'd0}},coeff[15],coeff[14],coeff[11],coeff[ 7],coeff[10],coeff[13],coeff[12],
                                   coeff[ 9],coeff[ 6],coeff[ 3],coeff[ 2],coeff[ 5],coeff[ 8],coeff[ 4],coeff[ 1] } :
                                 { coeff[15],coeff[14],coeff[11],coeff[ 7],coeff[10],coeff[13],coeff[12],coeff[ 9],
                                   coeff[ 6],coeff[ 3],coeff[ 2],coeff[ 5],coeff[ 8],coeff[ 4],coeff[ 1],coeff[ 0] } ;
     
     always_comb begin
         for( int ii = 0; ii < 16; ii++ ) begin
-            sig_coeff_flag[ii] = |scan[ii];
+            sig_coeff_flag[ii] = ( scan[ii][12:0] != 13'd0 ) ? 1'b1 : 1'b0;
         end
         num_coeff = ( ( ( { 4'd0, sig_coeff_flag[ 0] } + { 4'd0, sig_coeff_flag[ 1] } ) + ( { 4'd0, sig_coeff_flag[ 2] } + { 4'd0, sig_coeff_flag[ 3] } ) )   +
                       ( ( { 4'd0, sig_coeff_flag[ 4] } + { 4'd0, sig_coeff_flag[ 5] } ) + ( { 4'd0, sig_coeff_flag[ 6] } + { 4'd0, sig_coeff_flag[ 7] } ) ) ) +
@@ -491,15 +491,14 @@ module gg_process
             one_flag[ii] = ( scan[ii] == 13'h1 || scan[ii] == 13'h1FFF ) ? 1'b1 : 1'b0; // abs(scan[ii])==1
         end
         gt1_flag[16] = 1'b0;
-        for( int ii = 15; ii >= 0; ii-- ) begin // flag from 1st sig coeff >= 2 
-            gt1_flag[ii] =  ( gt1_flag[ii+1] || ( !one_flag[ii] && scan[ii] != 0 ) ) ? 1'b1 : 1'b0;
+        for( int ii = 15; ii >= 0; ii-- ) begin // flag from 1st sig coeff >= 2 down the list
+            gt1_flag[ii] =  gt1_flag[ii+1] | ( ~one_flag[ii] & sig_coeff_flag[ii] );
         end
         t1_count[16] = 2'd0;
         for( int ii = 15; ii >= 0; ii-- ) begin // need to stop at first scan coeff > 1
             t1_count[ii] = ( ii == 15 )             ? { 1'b0, one_flag[15] } :
                            ( t1_count[ii+1] == 3 ) ?   2'd3 : 
-                           ( !gt1_flag[ii] )       ? ( t1_count[ii+1] + { 1'b0, one_flag[ii] } ) : 
-                                                       t1_count[ii+1];
+                           ( gt1_flag[ii] )       ? t1_count[ii+1] : ( t1_count[ii+1] + 2'b01 );
         end
         trailing_ones = t1_count[0];
         for( int ii = 15; ii >= 0; ii-- ) begin
