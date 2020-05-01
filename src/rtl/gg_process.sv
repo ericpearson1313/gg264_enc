@@ -857,7 +857,7 @@ module vlc_cat
     always_comb begin
         shift[8:0] = b[BCNT-1:0]; // pad extend zeros
         for( int ii = 0; ii < QMAX; ii++ ) begin
-            barrel[0][ii*2 +: 2]  = ( ii > AMAX ) ? 2'b00 : { a[ABITS+ACNT+ii], a[ACNT+ii] };
+            barrel[0][ii*2 +: 2]  = ( ii >= AMAX ) ? 2'b00 : { a[ABITS+ACNT+ii], a[ACNT+ii] };
             barrel[1][ii*2 +: 2]  = ( shift[8] && ( BMAX > 256 ) ) ? (( ii >= 256 ) ? barrel[0][(ii-256)*2 +: 2] : 2'b00 ) : barrel[0][ii*2 +: 2];
             barrel[2][ii*2 +: 2]  = ( shift[7] && ( BMAX > 128 ) ) ? (( ii >= 128 ) ? barrel[1][(ii-128)*2 +: 2] : 2'b00 ) : barrel[1][ii*2 +: 2];
             barrel[3][ii*2 +: 2]  = ( shift[6] && ( BMAX >  64 ) ) ? (( ii >=  64 ) ? barrel[2][(ii- 64)*2 +: 2] : 2'b00 ) : barrel[2][ii*2 +: 2];
@@ -872,8 +872,8 @@ module vlc_cat
     end    
     
     always_comb begin
-        abcat[QCNT-1:0] = ( QCNT == ACNT ) ? ( ACNT[ACNT-1:0] + BCNT[BCNT:0] ) : 
-                                             ( {{(QCNT-ACNT){1'b0}}, ACNT[ACNT-1:0] } + {{(QCNT-BCNT){1'b0}}, BCNT[BCNT-1:0]} );
+        abcat[QCNT-1:0] = ( QCNT == ACNT ) ? ( a[ACNT-1:0] + b[BCNT:0] ) : 
+                                             ( {{(QCNT-ACNT){1'b0}}, a[ACNT-1:0] } + {{(QCNT-BCNT){1'b0}}, b[BCNT-1:0]} );
         for( int ii = 0; ii < QBITS; ii++ ) begin
             if( ii >= QMAX ) begin
                 abcat[ii+QCNT] = 1'b0; // mask
