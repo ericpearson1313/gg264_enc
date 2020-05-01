@@ -488,7 +488,7 @@ module gg_process
     logic [71:0] vlc32_trailing_ones;
     always_comb begin
         for( int ii = 0; ii < 16; ii++ ) begin
-            one_flag[ii] = ( scan[ii] == 13'h1 || scan[ii] == 13'h1FFF ) ? 1'b1 : 1'b0; // abs(scan[ii])==1
+            one_flag[ii] = ( scan[ii][12:0] == 13'h1 || scan[ii][12:0] == 13'h1FFF ) ? 1'b1 : 1'b0; // abs(scan[ii])==1
         end
         gt1_flag[16] = 1'b0;
         for( int ii = 15; ii >= 0; ii-- ) begin // flag from 1st sig coeff >= 2 down the list
@@ -496,7 +496,7 @@ module gg_process
         end
         t1_count[16] = 2'd0;
         for( int ii = 15; ii >= 0; ii-- ) begin // need to stop at first scan coeff > 1
-            t1_count[ii] = ( one_flag[ii] && !gt1_flag[ii] && t1_count[ii+1] != 2'd3 ) ? ( t1_count[ii+1] + 2'd1 ) : t1_count[ii+1];
+            t1_count[ii] = ( one_flag[ii] && !gt1_flag[ii+1] && t1_count[ii+1] != 2'd3 ) ? ( t1_count[ii+1] + 2'd1 ) : t1_count[ii+1];
         end
         trailing_ones = t1_count[0];
         sign_flag[0][16] = 0;
