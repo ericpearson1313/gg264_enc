@@ -58,7 +58,11 @@ Interactive Vivado 2019.2 on AWS EC2 r5.large instance starting from FPGA Develo
  
 First synth run: Started the r5.large EC2 instance with the AMI, installed the DVC gui, and ran vivado interactively, and was able to get the process core through its first 2hr out-of-context synthesis.
 
-Synthesis itterations in progress ...
+Synthesis itterations, cleared or validated most all synth warnings. 
+Process core module level synth size, before functional validation is: 
+
+28018 LUTs, 464 FFs, 48 DSPs  (Feels too small in luts, but we'll see ....)
+
 
 
 
