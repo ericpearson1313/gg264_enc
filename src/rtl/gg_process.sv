@@ -26,9 +26,9 @@ module gg_process
     )
     (
     input wire clk,
-    input wire [11:0]     orig[16],
-    input wire [11:0]     pred[16],
-    output logic [7:0]   recon[16],
+    input wire [0:15][11:0]     orig,
+    input wire [0:15][11:0]     pred,
+    output logic [0:15][7:0]   recon,
     input wire [7:0] offset, // [0.8] with max of 128 to give 0.5 rounding
     input wire [15:0] deadzone, // [8.8], with effective min of 255
     input wire [5:0] qpy,
@@ -575,13 +575,13 @@ module gg_process
         if( !dc_flag ) begin
             if( y_flag ) begin
                 left_y_nc_reg[ { bidx[3], bidx[1] } ] = num_coeff[4:0];
-                abv_y_nc_reg[  { bidx[2], bidx[1] } ] = num_coeff[4:0];
+                abv_y_nc_reg[  { bidx[2], bidx[0] } ] = num_coeff[4:0];
             end else if ( cb_flag ) begin
-                left_cb_nc_reg[ bidx[0] ] = num_coeff[4:0];
-                abv_cb_nc_reg[  bidx[1] ] = num_coeff[4:0];
+                left_cb_nc_reg[ bidx[1] ] = num_coeff[4:0];
+                abv_cb_nc_reg[  bidx[0] ] = num_coeff[4:0];
             end else begin // cr flag
-                left_cr_nc_reg[ bidx[0] ] = num_coeff[4:0];
-                abv_cr_nc_reg[  bidx[1] ] = num_coeff[4:0];
+                left_cr_nc_reg[ bidx[1] ] = num_coeff[4:0];
+                abv_cr_nc_reg[  bidx[0] ] = num_coeff[4:0];
             end
         end
     end
@@ -815,8 +815,8 @@ module gg_process
     // Assign rate outputs
     
     assign bitcount[8:0] = vlc512_cat[2][8:0]; 
-    assign bits[511:0]   = vlc512_cat[2][527:16];
-    assign mask[510:0]   = vlc512_cat[2][1039:528];
+    assign mask[511:0]   = vlc512_cat[2][527:16];
+    assign bits[511:0]   = vlc512_cat[2][1039:528];
     
     //////////
     // DONE
