@@ -23,8 +23,8 @@ FPGA development tools are available at $0 additional cost, provided as an AMI t
 
 ### EC2 Instances Emmployed
 - f1.2xlarge - $1.65/hr - FPGA runtime instance
-- r5.xlarge - $0.25/hr - Full chip FPGA synthesis 
-- r5.large - - $0.12/hr - Interactive block level synthesis sessions for $1/day
+- r5.xlarge  - $0.25/hr - Full chip FPGA synthesis 
+- r5.large   - $0.12/hr - Interactive block level synthesis sessions for $1/day
 
 ## Specifications
 
@@ -42,7 +42,11 @@ After which, the design will be pipelined to increase its throughput. At the ear
 
 
 ## Planning
-follow a process spiral of: plan, model, design, synthesis, simulate
+follow a process spiral of: plan, model, design, synthesis, simulate on each of the following:
+- gg_process - the block encoder
+- system - tbd simplified 1080p video encoder.
+
+## Status
 
 ### Model
 The C model can encode 720p video frames from a YUV files and output a valid bitstreams.
@@ -56,7 +60,7 @@ RTL has been written for the transform block rate-distortion process module.
 System Verilog was used with syntax checking provided in Vivado IDE 2018.3 running on desktop.
 
 ### Synthesis
-Interactive Vivado 2019.2 on AWS EC2 r5.large instance starting from FPGA Developer AMI AMI v1.8.2, using vivado 2019.2.
+Interactive Vivado 2019.2 synthesis on AWS EC2 r5.large instance starting from FPGA Developer AMI AMI v1.8.2, using vivado 2019.2.
  
 First synth run: Started the r5.large EC2 instance with the AMI, installed the DVC gui, and ran vivado interactively, and was able to get the process core through its first 2hr out-of-context synthesis.
 
@@ -65,11 +69,15 @@ Process core module level synth size, before functional validation is:
 
 28018 LUTs, 464 FFs, 48 DSPs  (Feels too small in luts, but we'll see ....)
 
+Module synthesis elapse time is 17 min on the r5.large instance.
+
 ### Simulation
 
 Minimal testbench added. Simulated using Vivado IDE 2018.3 running on desktop.
 
 testcase #0 :  Full macroblock, above/left out of picture, otherwise all zero inputs. observed outputs, (and fixed errors).
+
+next: add model generated data file, along with testbench: file read, stimulate, and ouput checking 
 
 
 
