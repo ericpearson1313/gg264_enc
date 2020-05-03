@@ -3,6 +3,8 @@ Open source verilog for a FPGA hardware WebVC Video Encoder.
 
 (FPGA = Field Programmable Gate Array)
 
+(WebVC = simplefied compressed video format compatible with H.264)
+
 ## Purpose
 
 Create a running encoder as a platform to showcase FPGA optimizations in areas of low latency, high throuput, and HLS synthesis.
@@ -62,6 +64,13 @@ Synthesis itterations, cleared or validated most all synth warnings.
 Process core module level synth size, before functional validation is: 
 
 28018 LUTs, 464 FFs, 48 DSPs  (Feels too small in luts, but we'll see ....)
+
+### Simulation
+
+Minimal testbench added. Simulated using Vivado IDE 2018.3 running on desktop.
+
+testcase #0 :  Full macroblock, above/left out of picture, otherwise all zero inputs. observed outputs, (and fixed errors).
+
 
 
 
