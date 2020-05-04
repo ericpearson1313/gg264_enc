@@ -771,52 +771,55 @@ module gg_process
 
     // Bit Funnel Tree, VLC Concatenation
     
-    logic [71:0] vlc32_cat[15];
-    logic [135:0] vlc64_cat[9];
-    logic [263:0] vlc128_cat[5];
-    logic [519:0] vlc256_cat[2];
-    logic [1039:0] vlc512_cat[3];
+    logic [71:0]    vlc32_cat_0,  vlc32_cat_1 ,  vlc32_cat_2 ,  vlc32_cat_3 , vlc32_cat_4 , vlc32_cat_5 , vlc32_cat_6, vlc32_cat_7, vlc32_cat_8;
+    logic [71:0]    vlc32_cat_9,  vlc32_cat_10,  vlc32_cat_11,  vlc32_cat_12, vlc32_cat_13, vlc32_cat_14;
+    logic [135:0]   vlc64_cat_0,  vlc64_cat_1 ,  vlc64_cat_2 ,  vlc64_cat_3 , vlc64_cat_4 , vlc64_cat_5 , vlc64_cat_6, vlc64_cat_7;
+    logic [263:0]  vlc128_cat_0, vlc128_cat_1 , vlc128_cat_2 , vlc128_cat_3 ;
+    logic [519:0]  vlc256_cat_0, vlc256_cat_1 ;
+    logic [1039:0] vlc512_cat_0, vlc512_cat_1 , vlc512_cat_2 ;
     
-    vlc_cat #( 13, 11, 10, 32, 8, 32, 8 ) cat_00_ ( .abcat(  vlc32_cat[ 0] ), .a(  vlc32_run_before[ 0]          ), .b( vlc32_run_before[ 1]          ) );
-    vlc_cat #( 11,  9,  8, 32, 8, 32, 8 ) cat_01_ ( .abcat(  vlc32_cat[ 1] ), .a(  vlc32_run_before[ 2]          ), .b( vlc32_run_before[ 3]          ) );
-    vlc_cat #(  9,  7,  6, 32, 8, 32, 8 ) cat_02_ ( .abcat(  vlc32_cat[ 2] ), .a(  vlc32_run_before[ 4]          ), .b( vlc32_run_before[ 5]          ) );
-    vlc_cat #(  7,  5,  4, 32, 8, 32, 8 ) cat_03_ ( .abcat(  vlc32_cat[ 3] ), .a(  vlc32_run_before[ 6]          ), .b( vlc32_run_before[ 7]          ) );
-    vlc_cat #(  5,  3,  3, 32, 8, 32, 8 ) cat_04_ ( .abcat(  vlc32_cat[ 4] ), .a(  vlc32_run_before[ 8]          ), .b( vlc32_run_before[ 9]          ) );
-    vlc_cat #(  4,  3,  2, 32, 8, 32, 8 ) cat_05_ ( .abcat(  vlc32_cat[ 5] ), .a(  vlc32_run_before[10]          ), .b( vlc32_run_before[11]          ) );
-    vlc_cat #(  2,  2,  1, 32, 8, 32, 8 ) cat_06_ ( .abcat(  vlc32_cat[ 6] ), .a(  vlc32_run_before[12]          ), .b( vlc32_run_before[13]          ) );
-    vlc_cat #( 19,  9, 13, 32, 8, 32, 8 ) cat_07_ ( .abcat(  vlc32_cat[ 7] ), .a(  vlc32_total_zeros             ), .b( vlc32_cat[ 0]                 ) );
-    vlc_cat #( 15, 11,  9, 32, 8, 32, 8 ) cat_08_ ( .abcat(  vlc32_cat[ 8] ), .a(  vlc32_cat[ 1]                 ), .b( vlc32_cat[ 2]                 ) ); 
-    vlc_cat #(  9,  7,  5, 32, 8, 32, 8 ) cat_09_ ( .abcat(  vlc32_cat[ 9] ), .a(  vlc32_cat[ 3]                 ), .b( vlc32_cat[ 4]                 ) ); 
-    vlc_cat #(  4,  4,  2, 32, 8, 32, 8 ) cat_10_ ( .abcat(  vlc32_cat[10] ), .a(  vlc32_cat[ 5]                 ), .b( vlc32_cat[ 6]                 ) );
-    vlc_cat #( 27, 19, 15, 32, 8, 32, 8 ) cat_11_ ( .abcat(  vlc32_cat[11] ), .a(  vlc32_cat[ 7]                 ), .b( vlc32_cat[ 8]                 ) );
-    vlc_cat #( 12,  9, 10, 32, 8, 32, 8 ) cat_12_ ( .abcat(  vlc32_cat[12] ), .a(  vlc32_cat[ 9]                 ), .b( vlc32_cat[10]                 ) );
-    vlc_cat #( 30, 27, 12, 32, 8, 32, 8 ) cat_13_ ( .abcat(  vlc32_cat[13] ), .a(  vlc32_cat[11]                 ), .b( vlc32_cat[12]                 ) );
-    vlc_cat #( 19, 16,  3, 32, 8, 32, 8 ) cat_14_ ( .abcat(  vlc32_cat[14] ), .a(  vlc32_coeff_token             ), .b( vlc32_trailing_ones           ) );
-    vlc_cat #( 47, 19, 28, 32, 8, 64, 8 ) cat_15_ ( .abcat(  vlc64_cat[ 0] ), .a(  vlc32_cat[14]                 ), .b( vlc32_prefix_suffix_coeff[15] ) );
-    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_16_ ( .abcat(  vlc64_cat[ 1] ), .a(  vlc32_prefix_suffix_coeff[14] ), .b( vlc32_prefix_suffix_coeff[13] ) );
-    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_17_ ( .abcat(  vlc64_cat[ 2] ), .a(  vlc32_prefix_suffix_coeff[12] ), .b( vlc32_prefix_suffix_coeff[11] ) );
-    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_18_ ( .abcat(  vlc64_cat[ 3] ), .a(  vlc32_prefix_suffix_coeff[10] ), .b( vlc32_prefix_suffix_coeff[9] ) );
-    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_19_ ( .abcat(  vlc64_cat[ 4] ), .a(  vlc32_prefix_suffix_coeff[ 8] ), .b( vlc32_prefix_suffix_coeff[7] ) );
-    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_20_ ( .abcat(  vlc64_cat[ 5] ), .a(  vlc32_prefix_suffix_coeff[ 6] ), .b( vlc32_prefix_suffix_coeff[5] ) );
-    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_21_ ( .abcat(  vlc64_cat[ 6] ), .a(  vlc32_prefix_suffix_coeff[ 4] ), .b( vlc32_prefix_suffix_coeff[3] ) );
-    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_22_ ( .abcat(  vlc64_cat[ 7] ), .a(  vlc32_prefix_suffix_coeff[ 2] ), .b( vlc32_prefix_suffix_coeff[1] ) );
-    vlc_cat #( 58, 28, 30, 32, 8, 64, 8 ) cat_23_ ( .abcat(  vlc64_cat[ 8] ), .a(  vlc32_prefix_suffix_coeff[ 0] ), .b( vlc32_cat[13]                 ) );
-    vlc_cat #(103, 47, 56, 64, 8,128, 8 ) cat_24_ ( .abcat( vlc128_cat[ 0] ), .a(  vlc64_cat[ 0]                 ), .b( vlc64_cat[ 1]                 ) );
-    vlc_cat #(112, 56, 56, 64, 8,128, 8 ) cat_25_ ( .abcat( vlc128_cat[ 1] ), .a(  vlc64_cat[ 2]                 ), .b( vlc64_cat[ 3]                 ) );
-    vlc_cat #(112, 56, 56, 64, 8,128, 8 ) cat_26_ ( .abcat( vlc128_cat[ 2] ), .a(  vlc64_cat[ 4]                 ), .b( vlc64_cat[ 5]                 ) );
-    vlc_cat #(112, 56, 56, 64, 8,128, 8 ) cat_27_ ( .abcat( vlc128_cat[ 3] ), .a(  vlc64_cat[ 6]                 ), .b( vlc64_cat[ 7]                 ) );
-    vlc_cat #( 58, 58,  0, 64, 8,128, 8 ) cat_28_ ( .abcat( vlc128_cat[ 4] ), .a(  vlc64_cat[ 8]                 ), .b(        136'b0                 ) );
-    vlc_cat #(215,103,112,128, 8,512,16 ) cat_29_ ( .abcat( vlc512_cat[ 0] ), .a( vlc128_cat[ 0]                 ), .b( vlc128_cat[ 1]                ) );
-    vlc_cat #(224,112,112,128, 8,256, 8 ) cat_30_ ( .abcat( vlc256_cat[ 0] ), .a( vlc128_cat[ 2]                 ), .b( vlc128_cat[ 3]                ) );
-    vlc_cat #( 58, 58,  0,128, 8,256, 8 ) cat_31_ ( .abcat( vlc256_cat[ 1] ), .a( vlc128_cat[ 4]                 ), .b(         264'b0                ) );
-    vlc_cat #(282,224, 58,256, 8,512,16 ) cat_32_ ( .abcat( vlc512_cat[ 1] ), .a( vlc256_cat[ 0]                 ), .b( vlc256_cat[ 1]                ) );
-    vlc_cat #(497,215,282,512,16,512,16 ) cat_33_ ( .abcat( vlc512_cat[ 2] ), .a( vlc512_cat[ 0]                 ), .b( vlc512_cat[ 1]                ) );
+    vlc_cat #( 13, 11, 10, 32, 8, 32, 8 ) cat_00_ ( .abcat(  vlc32_cat_0  ), .a(  vlc32_run_before[ 0]          ), .b( vlc32_run_before[ 1]          ) );
+    vlc_cat #( 11,  9,  8, 32, 8, 32, 8 ) cat_01_ ( .abcat(  vlc32_cat_1  ), .a(  vlc32_run_before[ 2]          ), .b( vlc32_run_before[ 3]          ) );
+    vlc_cat #(  9,  7,  6, 32, 8, 32, 8 ) cat_02_ ( .abcat(  vlc32_cat_2  ), .a(  vlc32_run_before[ 4]          ), .b( vlc32_run_before[ 5]          ) );
+    vlc_cat #(  7,  5,  4, 32, 8, 32, 8 ) cat_03_ ( .abcat(  vlc32_cat_3  ), .a(  vlc32_run_before[ 6]          ), .b( vlc32_run_before[ 7]          ) );
+    vlc_cat #(  5,  3,  3, 32, 8, 32, 8 ) cat_04_ ( .abcat(  vlc32_cat_4  ), .a(  vlc32_run_before[ 8]          ), .b( vlc32_run_before[ 9]          ) );
+    vlc_cat #(  4,  3,  2, 32, 8, 32, 8 ) cat_05_ ( .abcat(  vlc32_cat_5  ), .a(  vlc32_run_before[10]          ), .b( vlc32_run_before[11]          ) );
+    vlc_cat #(  2,  2,  1, 32, 8, 32, 8 ) cat_06_ ( .abcat(  vlc32_cat_6  ), .a(  vlc32_run_before[12]          ), .b( vlc32_run_before[13]          ) );
+    vlc_cat #( 19,  9, 13, 32, 8, 32, 8 ) cat_07_ ( .abcat(  vlc32_cat_7  ), .a(  vlc32_total_zeros             ), .b( vlc32_cat_0                   ) );
+    vlc_cat #( 15, 11,  9, 32, 8, 32, 8 ) cat_08_ ( .abcat(  vlc32_cat_8  ), .a(  vlc32_cat_1                   ), .b( vlc32_cat_2                   ) ); 
+    vlc_cat #(  9,  7,  5, 32, 8, 32, 8 ) cat_09_ ( .abcat(  vlc32_cat_9  ), .a(  vlc32_cat_3                   ), .b( vlc32_cat_4                   ) ); 
+    vlc_cat #(  4,  4,  2, 32, 8, 32, 8 ) cat_10_ ( .abcat(  vlc32_cat_10 ), .a(  vlc32_cat_5                   ), .b( vlc32_cat_6                   ) );
+    vlc_cat #( 27, 19, 15, 32, 8, 32, 8 ) cat_11_ ( .abcat(  vlc32_cat_11 ), .a(  vlc32_cat_7                   ), .b( vlc32_cat_8                   ) );
+    vlc_cat #( 12,  9,  4, 32, 8, 32, 8 ) cat_12_ ( .abcat(  vlc32_cat_12 ), .a(  vlc32_cat_9                   ), .b( vlc32_cat_10                  ) );
+    vlc_cat #( 30, 27, 12, 32, 8, 32, 8 ) cat_13_ ( .abcat(  vlc32_cat_13 ), .a(  vlc32_cat_11                  ), .b( vlc32_cat_12                  ) );
+    vlc_cat #( 19, 16,  3, 32, 8, 32, 8 ) cat_14_ ( .abcat(  vlc32_cat_14 ), .a(  vlc32_coeff_token             ), .b( vlc32_trailing_ones           ) );
+    
+    vlc_cat #( 47, 19, 28, 32, 8, 64, 8 ) cat_15_ ( .abcat(  vlc64_cat_0  ), .a(  vlc32_cat_14                  ), .b( vlc32_prefix_suffix_coeff[15] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_16_ ( .abcat(  vlc64_cat_1  ), .a(  vlc32_prefix_suffix_coeff[14] ), .b( vlc32_prefix_suffix_coeff[13] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_17_ ( .abcat(  vlc64_cat_2  ), .a(  vlc32_prefix_suffix_coeff[12] ), .b( vlc32_prefix_suffix_coeff[11] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_18_ ( .abcat(  vlc64_cat_3  ), .a(  vlc32_prefix_suffix_coeff[10] ), .b( vlc32_prefix_suffix_coeff[9] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_19_ ( .abcat(  vlc64_cat_4  ), .a(  vlc32_prefix_suffix_coeff[ 8] ), .b( vlc32_prefix_suffix_coeff[7] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_20_ ( .abcat(  vlc64_cat_5  ), .a(  vlc32_prefix_suffix_coeff[ 6] ), .b( vlc32_prefix_suffix_coeff[5] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_21_ ( .abcat(  vlc64_cat_6  ), .a(  vlc32_prefix_suffix_coeff[ 4] ), .b( vlc32_prefix_suffix_coeff[3] ) );
+    vlc_cat #( 56, 28, 28, 32, 8, 64, 8 ) cat_22_ ( .abcat(  vlc64_cat_7  ), .a(  vlc32_prefix_suffix_coeff[ 2] ), .b( vlc32_prefix_suffix_coeff[1] ) );
+    
+    vlc_cat #(103, 47, 56, 64, 8,128, 8 ) cat_23_ ( .abcat( vlc128_cat_0  ), .a(  vlc64_cat_0                   ), .b( vlc64_cat_1                   ) );
+    vlc_cat #(112, 56, 56, 64, 8,128, 8 ) cat_24_ ( .abcat( vlc128_cat_1  ), .a(  vlc64_cat_2                   ), .b( vlc64_cat_3                   ) );
+    vlc_cat #(112, 56, 56, 64, 8,128, 8 ) cat_25_ ( .abcat( vlc128_cat_2  ), .a(  vlc64_cat_4                   ), .b( vlc64_cat_5                   ) );
+    vlc_cat #(112, 56, 56, 64, 8,128, 8 ) cat_26_ ( .abcat( vlc128_cat_3  ), .a(  vlc64_cat_6                   ), .b( vlc64_cat_7                   ) );
+    
+    vlc_cat #(224,112,112,128, 8,256, 8 ) cat_27_ ( .abcat( vlc256_cat_0  ), .a( vlc128_cat_2                   ), .b( vlc128_cat_3                  ) );
+    vlc_cat #( 58, 28, 30, 32, 8,256, 8 ) cat_28_ ( .abcat( vlc256_cat_1  ), .a(  vlc32_prefix_suffix_coeff[ 0] ), .b( vlc32_cat_13                  ) );
+
+    vlc_cat #(215,103,112,128, 8,512,16 ) cat_29_ ( .abcat( vlc512_cat_0  ), .a( vlc128_cat_0                   ), .b( vlc128_cat_1                  ) );
+    vlc_cat #(282,224, 58,256, 8,512,16 ) cat_30_ ( .abcat( vlc512_cat_1  ), .a( vlc256_cat_0                   ), .b( vlc256_cat_1                  ) );
+    vlc_cat #(497,215,282,512,16,512,16 ) cat_31_ ( .abcat( vlc512_cat_2  ), .a( vlc512_cat_0                   ), .b( vlc512_cat_1                  ) );
    
     // Assign rate outputs
     
-    assign bitcount[8:0] = vlc512_cat[2][8:0]; 
-    assign mask[511:0]   = vlc512_cat[2][527:16];
-    assign bits[511:0]   = vlc512_cat[2][1039:528];
+    assign bitcount[8:0] = vlc512_cat_2[8:0]; 
+    assign mask[511:0]   = vlc512_cat_2[527:16];
+    assign bits[511:0]   = vlc512_cat_2[1039:528];
     
     //////////
     // DONE
