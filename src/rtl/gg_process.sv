@@ -44,8 +44,8 @@ module gg_process
     input  logic left_out_of_pic,
     output logic [6:0] overflow,
     // State I/O for external dc hold regs
-    input  logic [2:0][15:0][15:0] dc_hold,
-    output logic [2:0][15:0][15:0] dc_hold_dout,
+    input  logic [0:2][15:0][15:0] dc_hold,
+    output logic [0:2][15:0][15:0] dc_hold_dout,
     // State I/O for external neighbour nC Regs
     input  logic [0:3][7:0] above_nc_y,
     input  logic [0:1][7:0] above_nc_cb,
@@ -527,26 +527,19 @@ module gg_process
     logic [4:0] nc;
     logic [5:0] nab;
     
-    reg [3:0][7:0] left_y_nc_reg, abv_y_nc_reg;
-    reg [1:0][7:0] left_cb_nc_reg, abv_cb_nc_reg;
-    reg [1:0][7:0] left_cr_nc_reg, abv_cr_nc_reg;
-    
-    assign na = ( cb_flag && dc_flag ) ? left_cb_nc_reg[0] :
-                ( cr_flag && dc_flag ) ? left_cr_nc_reg[0] :
-                (  y_flag && dc_flag ) ? left_y_nc_reg[0] :
-                ( cb_flag            ) ? left_cb_nc_reg[ bidx[1] ] :
-                ( cr_flag            ) ? left_cr_nc_reg[ bidx[1] ] :
-                                         left_y_nc_reg[ { bidx[3], bidx[1] } ];
+    assign na = ( cb_flag && dc_flag ) ? left_nc_cb[0] :
+                ( cr_flag && dc_flag ) ? left_nc_cr[0] :
+                (  y_flag && dc_flag ) ? left_nc_y[0] :
+                ( cb_flag            ) ? left_nc_cb[ bidx[1] ] :
+                ( cr_flag            ) ? left_nc_cr[ bidx[1] ] :
+                                         left_nc_y[ { bidx[3], bidx[1] } ];
                               
     assign nb = ( cb_flag && dc_flag  ) ? above_nc_cb[0] : // DC always before AC, use external above
                 ( cr_flag && dc_flag  ) ? above_nc_cr[0] :
                 (  y_flag && dc_flag  ) ? above_nc_y[ 0] :
-                ( cb_flag && !bidx[1] ) ? above_nc_cb[   bidx[0] ] :
-                ( cb_flag             ) ? abv_cb_nc_reg[ bidx[0] ] :
-                ( cr_flag && !bidx[1] ) ? above_nc_cr[   bidx[0] ] :
-                ( cr_flag             ) ? abv_cr_nc_reg[ bidx[0] ] :
-                ( !bidx[1] && !bidx[3]) ? above_nc_y[   { bidx[2], bidx[0] } ] :
-                                          abv_y_nc_reg[ { bidx[2], bidx[0] } ];
+                ( cb_flag             ) ? above_nc_cb[ bidx[0] ] :
+                ( cr_flag             ) ? above_nc_cr[ bidx[0] ] :
+                                          above_nc_y[ { bidx[2], bidx[0] } ];
 
     assign nab[5:0] = { 1'b0, na[4:0] } + { 1'b0, nb[4:0] } + 6'd1;
     
@@ -625,7 +618,6 @@ module gg_process
     logic [3:0] run_before[16];
     logic [3:0] zeros_left[16];
     logic [15:0] first_sig_coeff;
-    logic [15:0] valid_run;
 
     always_comb begin
         for( int ii = 15; ii >= 0; ii-- ) begin
@@ -706,7 +698,6 @@ module gg_process
     // prefix+suffix vlc code coefficients
     logic [71:0] vlc32_prefix_suffix_coeff[16];
     logic [6:0][12:0] p15_thresh = { 13'd960, 13'd480, 13'd240, 13'd120, 13'd 60, 13'd30, 13'd30 }; 
-    logic [15:0] p15_suffix_diff[16];
     logic [14:0][15:0] mask_tbl = { 16'h7FFF, 16'h3FFF, 16'h1FFF, 16'hFFF, 16'h7FF, 16'h3FF, 16'h1FF, 16'hFF, 16'h7F, 16'h3F, 16'h1F, 16'hF, 16'h7, 16'h3, 16'h1 };
     always_comb begin
         overflow[6] = 0;
