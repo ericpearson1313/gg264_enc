@@ -49,31 +49,42 @@ module gg_process_testbench(
     // Device Under Test
     //////////////////////
 
+    // Dut inputs
      logic [0:15][11:0]  orig;
      logic [0:15][11:0]  pred;
-     logic [0:15][7:0]   recon;
      logic [7:0]   offset; // [0.8] with max of 128 to give 0.5 rounding
      logic [15:0] deadzone; // [8.8], with effective min of 255
      logic [5:0] qpy;
      logic [2:0] cidx; // cidx={0-luma, 1-acluma, 2-cb, 3-cr, 4-dccb, 5-dccr, 6-dcy}
      logic [3:0] bidx; // block IDX in h264 order
-     logic [11:0] sad; // 4x4 sum absolute difference
-     logic [19:0] ssd; // 4x4 sum of squared difference
-     logic [8:0] bitcount; // bitcount to code block
-     logic [511:0] bits; // output bits (max 501
-     logic [511:0] mask; // mask of valid output bits
-     logic [4:0] num_coeff; // Count of non-zero block coeffs
      logic abv_out_of_pic;
      logic left_out_of_pic;
      logic [3:0][7:0] above_nc_y;
      logic [1:0][7:0] above_nc_cb;
      logic [1:0][7:0] above_nc_cr;
+    // Dut outputs
+     logic [0:15][7:0]   recon;
+     logic [8:0] bitcount;
+     logic [511:0] bits;
+     logic [511:0] mask;
+     logic [11:0] sad;
+     logic [19:0] ssd;
      logic [3:0][7:0] below_nc_y;
      logic [1:0][7:0] below_nc_cb;
      logic [1:0][7:0] below_nc_cr;
      logic [6:0] overflow;
-    
-    gg_process  
+     logic [4:0] num_coeff;
+     logic [2:0][15:0][15:0] dc_hold;
+     logic [2:0][15:0][15:0] dc_hold_dout;
+     logic [0:3][7:0] left_nc_y;    
+     logic [0:1][7:0] left_nc_cb;    
+     logic [0:1][7:0] left_nc_cr;
+     logic [0:3][7:0] right_nc_y;    
+     logic [0:1][7:0] right_nc_cb;    
+     logic [0:1][7:0] right_nc_cr;
+     
+     
+   gg_process  
    #(
         .BIT_LEN  ( 17 ), 
         .WORD_LEN ( 16 )
@@ -93,7 +104,12 @@ module gg_process_testbench(
         .above_nc_y      ( above_nc_y     ), 
         .above_nc_cb     ( above_nc_cb    ), 
         .above_nc_cr     ( above_nc_cr    ), 
+        .left_nc_y       ( left_nc_y      ), 
+        .left_nc_cb      ( left_nc_cb     ), 
+        .left_nc_cr      ( left_nc_cr     ), 
+        .dc_hold         ( dc_hold        ),
         // Outputs
+        .dc_hold_dout    ( dc_hold_dout   ),
         .recon           ( recon          ), 
         .bitcount        ( bitcount       ), // bitcount to code block
         .bits            ( bits           ), // output bits (max 497 bits)
@@ -104,13 +120,32 @@ module gg_process_testbench(
         .below_nc_y      ( below_nc_y     ), // Num Coeff holding registers
         .below_nc_cb     ( below_nc_cb    ), //     to be saved for the below Macroblock Row inputs
         .below_nc_cr     ( below_nc_cr    ), //     these are updated with num_coeff 
+        .right_nc_y      ( right_nc_y     ), 
+        .right_nc_cb     ( right_nc_cb    ), 
+        .right_nc_cr     ( right_nc_cr    ), 
         .overflow        ( overflow       )  // Overflow: 0-qdz, 1-iquant, 2..5-itran, 6-vlcp15
     );
+    
+    // Add testbench Flip Flops for left_nc, and dc_hold.
+    
+    always_ff @(posedge clk) begin
+        dc_hold <= dc_hold_dout;
+        left_nc_y <= right_nc_y;
+        left_nc_cb <= right_nc_cb;
+        left_nc_cr <= right_nc_cr;
+    end
+    
+    
+ ///////////////////////////////////////////
+ //
+ //              TESTs
+ //
+ ///////////////////////////////////////////        
     
     
     initial begin
        orig = 192'h0;
-       pred = 129'h0;
+       pred = 192'h0;
        offset = 8'h0;
        deadzone = 16'h00;
        qpy  = 6'd0;
@@ -147,6 +182,23 @@ module gg_process_testbench(
            #10;
        end
        
+       // Step thru a real block
+       
+       orig = { 12'd33 , 12'd36 , 12'd37 , 12'd44 , 
+                12'd68 , 12'd65 , 12'd62 , 12'd62 , 
+                12'd98 , 12'd92 , 12'd96 , 12'd94 , 
+                12'd116, 12'd114, 12'd116, 12'd119};
+       pred = {16{12'd128}};
+       offset = 8'h0;
+       deadzone = 16'h00;
+       qpy  = 6'd29;
+       cidx = 3'd0;
+       bidx = 4'd0;
+       abv_out_of_pic  = 1'b1;
+       left_out_of_pic = 1'b1;
+       above_nc_y  = 32'h0;
+       above_nc_cr = 16'h0;
+       above_nc_cb = 16'h0;   
     end
 
 endmodule

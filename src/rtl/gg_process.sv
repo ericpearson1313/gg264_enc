@@ -25,30 +25,40 @@ module gg_process
      parameter int WORD_LEN              = 16
     )
     (
-    input wire clk,
-    input wire [0:15][11:0]     orig,
-    input wire [0:15][11:0]     pred,
+    input  logic clk,
+    input  logic [0:15][11:0]     orig,
+    input  logic [0:15][11:0]     pred,
     output logic [0:15][7:0]   recon,
-    input wire [7:0] offset, // [0.8] with max of 128 to give 0.5 rounding
-    input wire [15:0] deadzone, // [8.8], with effective min of 255
-    input wire [5:0] qpy,
-    input wire [2:0] cidx, // cidx={0-luma, 1-acluma, 2-cb, 3-cr, 4-dccb, 5-dccr, 6-dcy}
-    input wire [3:0] bidx, // block IDX in h264 order
+    input  logic [7:0] offset, // [0.8] with max of 128 to give 0.5 rounding
+    input  logic [15:0] deadzone, // [8.8], with effective min of 255
+    input  logic [5:0] qpy,
+    input  logic [2:0] cidx, // cidx={0-luma, 1-acluma, 2-cb, 3-cr, 4-dccb, 5-dccr, 6-dcy}
+    input  logic [3:0] bidx, // block IDX in h264 order
     output logic [11:0] sad, // 4x4 sum absolute difference
     output logic [19:0] ssd, // 4x4 sum of squared difference
     output logic [8:0] bitcount, // bitcount to code block
     output logic [511:0] bits, // output bits (max 501
     output logic [511:0] mask, // mask of valid output bits
     output logic [4:0] num_coeff, // Count of non-zero block coeffs
-    input wire abv_out_of_pic,
-    input wire left_out_of_pic,
-    input wire [3:0][7:0] above_nc_y,
-    input wire [1:0][7:0] above_nc_cb,
-    input wire [1:0][7:0] above_nc_cr,
-    output logic [3:0][7:0] below_nc_y,
-    output logic [1:0][7:0] below_nc_cb,
-    output logic [1:0][7:0] below_nc_cr,
-    output logic [6:0] overflow
+    input  logic abv_out_of_pic,
+    input  logic left_out_of_pic,
+    output logic [6:0] overflow,
+    // State I/O for external dc hold regs
+    input  logic [2:0][15:0][15:0] dc_hold,
+    output logic [2:0][15:0][15:0] dc_hold_dout,
+    // State I/O for external neighbour nC Regs
+    input  logic [0:3][7:0] above_nc_y,
+    input  logic [0:1][7:0] above_nc_cb,
+    input  logic [0:1][7:0] above_nc_cr,
+    input  logic [0:3][7:0] left_nc_y,
+    input  logic [0:1][7:0] left_nc_cb,
+    input  logic [0:1][7:0] left_nc_cr,
+    output logic [0:3][7:0] below_nc_y,
+    output logic [0:1][7:0] below_nc_cb,
+    output logic [0:1][7:0] below_nc_cr,
+    output logic [0:3][7:0] right_nc_y,
+    output logic [0:1][7:0] right_nc_cb,
+    output logic [0:1][7:0] right_nc_cr
     );
  
  
@@ -88,11 +98,11 @@ module gg_process
             b[row * 4 + 2][13:0] = {    a[row * 4 + 1][12]  , a[row * 4 + 1][12:0] } -               {    a[row * 4 + 2][12]  ,  a[row * 4 + 2][12:0]       } ;
             b[row * 4 + 3][13:0] = {    a[row * 4 + 0][12]  , a[row * 4 + 0][12:0] } -               {    a[row * 4 + 3][12]  ,  a[row * 4 + 3][12:0]       } ;
             c[row * 4 + 0][15:0] = { {2{b[row * 4 + 0][13]}}, b[row * 4 + 0][13:0] } +               { {2{b[row * 4 + 1][13]}},  b[row * 4 + 1][13:0]       } ;
-            c[row * 4 + 1][15:0] = { {2{b[row * 4 + 2][13]}}, b[row * 4 + 2][13:0] } + ( dc_flag ) ? { {2{b[row * 4 + 3][13]}},  b[row * 4 + 3][13:0]       } : 
-                                                                                                     {    b[row * 4 + 3][13]  ,  b[row * 4 + 3][13:0], 1'b0 } ;
+            c[row * 4 + 1][15:0] = { {2{b[row * 4 + 2][13]}}, b[row * 4 + 2][13:0] } +(( dc_flag ) ? { {2{b[row * 4 + 3][13]}},  b[row * 4 + 3][13:0]       } : 
+                                                                                                     {    b[row * 4 + 3][13]  ,  b[row * 4 + 3][13:0], 1'b0 });
             c[row * 4 + 2][15:0] = { {2{b[row * 4 + 0][13]}}, b[row * 4 + 0][13:0] } -               { {2{b[row * 4 + 1][13]}},  b[row * 4 + 1][13:0]       } ;
-            c[row * 4 + 3][15:0] = { {2{b[row * 4 + 3][13]}}, b[row * 4 + 3][13:0] } - ( dc_flag ) ? { {2{b[row * 4 + 2][13]}},  b[row * 4 + 2][13:0]       } : 
-                                                                                                     {    b[row * 4 + 2][13]  ,  b[row * 4 + 2][13:0], 1'b0 } ;
+            c[row * 4 + 3][15:0] = { {2{b[row * 4 + 3][13]}}, b[row * 4 + 3][13:0] } -(( dc_flag ) ? { {2{b[row * 4 + 2][13]}},  b[row * 4 + 2][13:0]       } : 
+                                                                                                     {    b[row * 4 + 2][13]  ,  b[row * 4 + 2][13:0], 1'b0 });
         end
         for (int col = 0; col < 4; col++) begin // col 1d transforms
             d[col + 4 * 0][16:0] = {    c[col + 4 * 0][15]  , c[col + 4 * 0][15:0] } +               {    c[col + 4 * 3][15]  ,  c[col + 4 * 3][15:0]       } ;
@@ -100,11 +110,11 @@ module gg_process
             d[col + 4 * 2][16:0] = {    c[col + 4 * 1][15]  , c[col + 4 * 1][15:0] } -               {    c[col + 4 * 2][15]  ,  c[col + 4 * 2][15:0]       } ;
             d[col + 4 * 3][16:0] = {    c[col + 4 * 0][15]  , c[col + 4 * 0][15:0] } -               {    c[col + 4 * 3][15]  ,  c[col + 4 * 3][15:0]       } ;
             e[col + 4 * 0][18:0] = { {2{d[col + 4 * 0][16]}}, d[col + 4 * 0][16:0] } +               { {2{d[col + 4 * 1][16]}},  d[col + 4 * 1][16:0]       } ;
-            e[col + 4 * 1][18:0] = { {2{d[col + 4 * 2][16]}}, d[col + 4 * 2][16:0] } + ( dc_flag ) ? { {2{d[col + 4 * 3][16]}},  d[col + 4 * 3][16:0]       } : 
-                                                                                                     {    d[col + 4 * 3][16]  ,  d[col + 4 * 3][16:0], 1'b0 } ;
+            e[col + 4 * 1][18:0] = { {2{d[col + 4 * 2][16]}}, d[col + 4 * 2][16:0] } +(( dc_flag ) ? { {2{d[col + 4 * 3][16]}},  d[col + 4 * 3][16:0]       } : 
+                                                                                                     {    d[col + 4 * 3][16]  ,  d[col + 4 * 3][16:0], 1'b0 });
             e[col + 4 * 2][18:0] = { {2{d[col + 4 * 0][16]}}, d[col + 4 * 0][16:0] } -               { {2{d[col + 4 * 1][16]}},  d[col + 4 * 1][16:0]       } ;
-            e[col + 4 * 3][18:0] = { {2{d[col + 4 * 3][16]}}, d[col + 4 * 3][16:0] } - ( dc_flag ) ? { {2{d[col + 4 * 2][16]}},  d[col + 4 * 2][16:0], 1'b0 } : 
-                                                                                                     {    d[col + 4 * 2][16]  ,  d[col + 4 * 2][16:0], 1'b0 } ;
+            e[col + 4 * 3][18:0] = { {2{d[col + 4 * 3][16]}}, d[col + 4 * 3][16:0] } -(( dc_flag ) ? { {2{d[col + 4 * 2][16]}},  d[col + 4 * 2][16:0], 1'b0 } : 
+                                                                                                     {    d[col + 4 * 2][16]  ,  d[col + 4 * 2][16:0], 1'b0 });
         end    
     end
 
@@ -234,13 +244,9 @@ module gg_process
                       { dvm2, dvm1, dvm2, dvm1 }, 
                       { dvm0, dvm2, dvm0, dvm2 }, 
                       { dvm2, dvm1, dvm2, dvm1 } };
-
-
-
-    reg [15:0] dc_hold [3][16];
-
     logic [28:0] f[16];
     logic signed [24:0] dprod[16]; // 13 bit signed coeff * 5+4 bit quant
+    logic signed [9:0] dmul[16];
     logic signed [24:0] dpofs[16]; // with rounding offset
     logic signed [15:0] dcoeff[16];
 
@@ -250,7 +256,8 @@ module gg_process
                                ( ii == 0 && ac_flag && cb_flag ) ? dc_hold[1][{ 1'b0, bidx[1], 1'b0, bidx[0] }][15:0] : // sample 0,1,4,5
                                ( ii == 0 && ac_flag &&  y_flag ) ? dc_hold[0][bidx[3:0]][15:0] : // luma dc coeff
                                                                    { {3{coeff[ii][12]}}, coeff[ii][12:0] }; // regular coeff
-            dprod[ii][24:0] = dcoeff[ii][15:0] * { dquant[ii][4:0], 4'b0000 };
+            dmul[ii][9:0] = { 1'b0, dquant[ii][4:0], 4'b0000 };
+            dprod[ii] = dcoeff[ii] * dmul[ii]; // Signed Multiply!
             dpofs[ii][24:0] = dprod[ii][24:0] + 
                              (( ii == 0 && ac_flag && qpdiv6 == 0 ) ? 25'h20:
                               ( ii == 0 && ac_flag && qpdiv6 == 1 ) ? 25'h10:
@@ -331,8 +338,8 @@ module gg_process
             g[row * 4 + 2][16:0] = ( ( dc_flag ) ? 
                                    {    f[row * 4 + 1][15]  , f[row * 4 + 1][15:0] } :
                                    { {2{f[row * 4 + 1][15]}}, f[row * 4 + 1][15:1] })-               {    f[row * 4 + 3][15]  ,  f[row * 4 + 3][15:0] } ;
-            g[row * 4 + 3][16:0] = {    f[row * 4 + 1][15]  , f[row * 4 + 1][15:0] } - ( dc_flag ) ? {    f[row * 4 + 3][15]  ,  f[row * 4 + 3][15:0] } :
-                                                                                                     { {2{f[row * 4 + 3][15]}},  f[row * 4 + 3][15:1] } ;
+            g[row * 4 + 3][16:0] = {    f[row * 4 + 1][15]  , f[row * 4 + 1][15:0] } -(( dc_flag ) ? {    f[row * 4 + 3][15]  ,  f[row * 4 + 3][15:0] } :
+                                                                                                     { {2{f[row * 4 + 3][15]}},  f[row * 4 + 3][15:1] });
             h[row * 4 + 0][16:0] = {    g[row * 4 + 0][15]  , g[row * 4 + 0][15:0] } +               {    g[row * 4 + 3][15]  ,  g[row * 4 + 3][15:0] } ;
             h[row * 4 + 1][16:0] = {    g[row * 4 + 1][15]  , g[row * 4 + 1][15:0] } +               {    g[row * 4 + 2][15]  ,  g[row * 4 + 2][15:0] } ;
             h[row * 4 + 2][16:0] = {    g[row * 4 + 1][15]  , g[row * 4 + 1][15:0] } -               {    g[row * 4 + 2][15]  ,  g[row * 4 + 2][15:0] } ;
@@ -344,8 +351,8 @@ module gg_process
             k[col + 4 * 2][16:0] = ( ( dc_flag ) ?  
                                    {    h[col + 4 * 1][15]  , h[col + 4 * 1][15:0] } :
                                    { {2{h[col + 4 * 1][15]}}, h[col + 4 * 1][15:1] })-               {    h[col + 4 * 3][15]  ,  h[col + 4 * 3][15:0] } ;
-            k[col + 4 * 3][16:0] = {    h[col + 4 * 1][15]  , h[col + 4 * 1][15:0] } - ( dc_flag ) ? {    h[col + 4 * 3][15]  ,  h[col + 4 * 3][15:0] } :
-                                                                                                     { {2{h[col + 4 * 3][15]}},  h[col + 4 * 3][15:1] } ;
+            k[col + 4 * 3][16:0] = {    h[col + 4 * 1][15]  , h[col + 4 * 1][15:0] } -(( dc_flag ) ? {    h[col + 4 * 3][15]  ,  h[col + 4 * 3][15:0] } :
+                                                                                                     { {2{h[col + 4 * 3][15]}},  h[col + 4 * 3][15:1] });
             m[col + 4 * 0][16:0] = {    k[col + 4 * 0][15]  , k[col + 4 * 0][15:0] } +               {    k[col + 4 * 3][15]  ,  k[col + 4 * 3][15:0] } ;
             m[col + 4 * 1][16:0] = {    k[col + 4 * 1][15]  , k[col + 4 * 1][15:0] } +               {    k[col + 4 * 2][15]  ,  k[col + 4 * 2][15:0] } ;
             m[col + 4 * 2][16:0] = {    k[col + 4 * 1][15]  , k[col + 4 * 1][15:0] } -               {    k[col + 4 * 2][15]  ,  k[col + 4 * 2][15:0] } ;
@@ -369,19 +376,11 @@ module gg_process
 
 	// Save transformed DC values for later combination and quantization
 
-    always_ff @(posedge clk) begin
-        if( dc_flag ) begin
-            for( int ii = 0; ii < 16; ii++ ) begin
-                if( y_flag ) begin
-                    dc_hold[0][ii][15:0] <= m[ii][15:0];
-                end else
-                if( cb_flag ) begin
-                    dc_hold[1][ii][15:0] <= m[ii][15:0];
-                end else
-                if( cr_flag ) begin
-                    dc_hold[2][ii][15:0] <= m[ii][15:0];
-                end
-            end
+    always_comb begin
+        for( int ii = 0; ii < 16; ii++ ) begin
+            dc_hold_dout[0][ii][15:0] = ( dc_flag &&  y_flag ) ? m[ii][15:0] : dc_hold[0][ii][15:0];
+            dc_hold_dout[1][ii][15:0] = ( dc_flag && cb_flag ) ? m[ii][15:0] : dc_hold[1][ii][15:0];
+            dc_hold_dout[2][ii][15:0] = ( dc_flag && cr_flag ) ? m[ii][15:0] : dc_hold[2][ii][15:0];
         end
     end
     
@@ -392,7 +391,7 @@ module gg_process
 
     always_comb begin
         for( int ii = 0; ii < 16; ii++ ) begin
-            pre_sh_res[ii][16:0]= { 1'b0, m[ii][15:0] } + 17'd32;
+            pre_sh_res[ii][16:0]= { m[ii][15], m[ii][15:0] } + 17'd32;
             res[ii][10:0] = pre_sh_res[ii][16:6];
         end
     end
@@ -422,11 +421,11 @@ module gg_process
         end
         // Sum Distortions
         ssd[19:0] =(( { 4'b0, rsqr[ 0][15:0] } + { 4'b0, rsqr[ 1][15:0] } ) + ( { 4'b0, rsqr[ 2][15:0] } + { 4'b0, rsqr[ 3][15:0] } ) +
-                    ( { 4'b0, rsqr[ 4][15:0] } + { 4'b0, rsqr[ 5][15:0] } ) + ( { 4'b0, rsqr[ 4][15:0] } + { 4'b0, rsqr[ 5][15:0] } )) +
+                    ( { 4'b0, rsqr[ 4][15:0] } + { 4'b0, rsqr[ 5][15:0] } ) + ( { 4'b0, rsqr[ 6][15:0] } + { 4'b0, rsqr[ 7][15:0] } )) +
                    (( { 4'b0, rsqr[ 8][15:0] } + { 4'b0, rsqr[ 9][15:0] } ) + ( { 4'b0, rsqr[10][15:0] } + { 4'b0, rsqr[11][15:0] } ) +
                     ( { 4'b0, rsqr[12][15:0] } + { 4'b0, rsqr[13][15:0] } ) + ( { 4'b0, rsqr[14][15:0] } + { 4'b0, rsqr[15][15:0] } ));
         sad[11:0] =(( { 4'b0, rabs[ 0][ 7:0] } + { 4'b0, rabs[ 1][ 7:0] } ) + ( { 4'b0, rabs[ 2][ 7:0] } + { 4'b0, rabs[ 3][ 7:0] } ) +
-                    ( { 4'b0, rabs[ 4][ 7:0] } + { 4'b0, rabs[ 5][ 7:0] } ) + ( { 4'b0, rabs[ 4][ 7:0] } + { 4'b0, rabs[ 5][ 7:0] } )) +
+                    ( { 4'b0, rabs[ 4][ 7:0] } + { 4'b0, rabs[ 5][ 7:0] } ) + ( { 4'b0, rabs[ 6][ 7:0] } + { 4'b0, rabs[ 7][ 7:0] } )) +
                    (( { 4'b0, rabs[ 8][ 7:0] } + { 4'b0, rabs[ 9][ 7:0] } ) + ( { 4'b0, rabs[10][ 7:0] } + { 4'b0, rabs[11][ 7:0] } ) +
                     ( { 4'b0, rabs[12][ 7:0] } + { 4'b0, rabs[13][ 7:0] } ) + ( { 4'b0, rabs[14][ 7:0] } + { 4'b0, rabs[15][ 7:0] } ));
     end
@@ -569,28 +568,28 @@ module gg_process
         .vlc32          ( vlc32_coeff_token )
     );  
 
-    // Update nc context
+    // Update nc context right/below. In simple case these are an external register
     
-    always_ff @(posedge clk) begin
-        if( !dc_flag ) begin
-            if( y_flag ) begin
-                left_y_nc_reg[ { bidx[3], bidx[1] } ] = num_coeff[4:0];
-                abv_y_nc_reg[  { bidx[2], bidx[0] } ] = num_coeff[4:0];
-            end else if ( cb_flag ) begin
-                left_cb_nc_reg[ bidx[1] ] = num_coeff[4:0];
-                abv_cb_nc_reg[  bidx[0] ] = num_coeff[4:0];
-            end else begin // cr flag
-                left_cr_nc_reg[ bidx[1] ] = num_coeff[4:0];
-                abv_cr_nc_reg[  bidx[0] ] = num_coeff[4:0];
-            end
-        end
+    always_comb begin
+        // left -> right
+        right_nc_y[0] =  ( !dc_flag && y_flag && !bidx[3] && !bidx[1] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, left_nc_y[0][4:0] };
+        right_nc_y[1] =  ( !dc_flag && y_flag && !bidx[3] &&  bidx[1] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, left_nc_y[1][4:0] };
+        right_nc_y[2] =  ( !dc_flag && y_flag &&  bidx[3] && !bidx[1] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, left_nc_y[2][4:0] };
+        right_nc_y[3] =  ( !dc_flag && y_flag &&  bidx[3] &&  bidx[1] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, left_nc_y[3][4:0] };
+        right_nc_cb[0] = ( !dc_flag && cb_flag && !bidx[1] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, left_nc_cb[0][4:0] };
+        right_nc_cb[1] = ( !dc_flag && cb_flag &&  bidx[1] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, left_nc_cb[1][4:0] };
+        right_nc_cr[0] = ( !dc_flag && cr_flag && !bidx[1] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, left_nc_cr[0][4:0] };                     
+        right_nc_cr[1] = ( !dc_flag && cr_flag &&  bidx[1] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, left_nc_cr[1][4:0] }; 
+        // above -> below      
+        below_nc_y[0] =  ( !dc_flag && y_flag && !bidx[2] && !bidx[0] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, above_nc_y[0][4:0] };
+        below_nc_y[1] =  ( !dc_flag && y_flag && !bidx[2] &&  bidx[0] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, above_nc_y[1][4:0] };
+        below_nc_y[2] =  ( !dc_flag && y_flag &&  bidx[2] && !bidx[0] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, above_nc_y[2][4:0] };
+        below_nc_y[3] =  ( !dc_flag && y_flag &&  bidx[2] &&  bidx[0] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, above_nc_y[3][4:0] };
+        below_nc_cb[0] = ( !dc_flag && cb_flag && !bidx[0] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, above_nc_cb[0][4:0] };
+        below_nc_cb[1] = ( !dc_flag && cb_flag &&  bidx[0] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, above_nc_cb[1][4:0] };
+        below_nc_cr[0] = ( !dc_flag && cr_flag && !bidx[0] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, above_nc_cr[0][4:0] };                     
+        below_nc_cr[1] = ( !dc_flag && cr_flag &&  bidx[0] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, above_nc_cr[1][4:0] };        
     end
-
-    // Assign below nC output.
-    assign below_nc_y = abv_y_nc_reg;
-    assign below_nc_cb = abv_cb_nc_reg;
-    assign below_nc_cr = abv_cr_nc_reg;
-    
 
 	//////////////////////////////////////////
 	// Syntax Element: Total zeros
