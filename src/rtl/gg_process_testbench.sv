@@ -147,6 +147,7 @@ module gg_process_testbench(
     
     logic [0:25][0:15][11:0] orig_mb_vec; // Very first test macroblock
     logic [0:23][0:15][ 7:0] recon_mb_vec; // frist mb recon (no chroma dc)
+    logic [0:25][1032:0] vlc_mb_vec; // VLC format, 16 len, 512 data, 512 mask 
        
     assign orig_mb_vec = {
         { 12'h21, 12'h24, 12'h25, 12'h2C, 12'h44, 12'h41, 12'h3E, 12'h3E, 12'h62, 12'h5C, 12'h60, 12'h5E, 12'h74, 12'h72, 12'h74, 12'h77 },
@@ -203,8 +204,36 @@ module gg_process_testbench(
         { 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82 },
         { 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82 } 
         };
-        
-        
+     
+    assign vlc_mb_vec = {
+         { 9'd30, 512'b00000111_0000000001_00000101_110_0 , 512'b111111111111111111111111111111 },
+         { 9'd28, 512'b000111_0000000001_00000101_110_0 , 512'b1111111111111111111111111111 },
+         { 9'd32, 512'b001000_000_1_011_0000000000011_000001 , 512'b11111111111111111111111111111111 },
+         { 9'd24, 512'b01000_1_1_011_010_0000011_0101 , 512'b111111111111111111111111 },
+         { 9'd43, 512'b0000111_01_10_0000000000000001000000000001_0101 , 512'b1111111111111111111111111111111111111111111 },
+         { 9'd36, 512'b00000111_00001_101_000111_0001001_0101_1_00 , 512'b111111111111111111111111111111111111 },
+         { 9'd28, 512'b01111_1_0000000000000010101_111 , 512'b1111111111111111111111111111 },
+         { 9'd29, 512'b000101_00_01_00000000011_110_001_1_0 , 512'b11111111111111111111111111111 },
+         { 9'd37, 512'b001010_0_001_11_11_011_00011_000000101_00001_0 , 512'b1111111111111111111111111111111111111 },
+         { 9'd28, 512'b0001011_01_011_010_00010_110_0100_0 , 512'b1111111111111111111111111111 },
+         { 9'd42, 512'b001000_1_11_0000000000000001000000000111_101_00 , 512'b111111111111111111111111111111111111111111 },
+         { 9'd23, 512'b01011_11_0001_0011_0101_01_1_0 , 512'b11111111111111111111111 },
+         { 9'd31, 512'b01111_0_0000000000000010111_011_000 , 512'b1111111111111111111111111111111 },
+         { 9'd33, 512'b001001_00_0000000000000010001_110_01_0 , 512'b111111111111111111111111111111111 },
+         { 9'd21, 512'b000111_01_000000011_110_0 , 512'b111111111111111111111 },
+         { 9'd43, 512'b00000110_0_01_0010_00000000011_000111_1110_111_01_1_0 , 512'b1111111111111111111111111111111111111111111 },
+         { 9'd9, 512'b001_00_00_00 , 512'b111111111 },
+         { 9'd3, 512'b1_0_1 , 512'b111 },
+         { 9'd6, 512'b01_0_011 , 512'b111111 },
+         { 9'd1, 512'b1 , 512'b1 },
+         { 9'd7, 512'b01_1_0010 , 512'b1111111 },
+         { 9'd4, 512'b01_1_1 , 512'b1111 },
+         { 9'd1, 512'b1 , 512'b1 },
+         { 9'd1, 512'b1 , 512'b1 },
+         { 9'd1, 512'b1 , 512'b1 },
+         { 9'd1, 512'b1 , 512'b1 }
+        };  
+       
     initial begin
     #1;
        orig = 192'h0;
@@ -280,6 +309,9 @@ module gg_process_testbench(
            if( recon != recon_mb_vec[ii] ) begin
                 $write("ERROR: Recon[%d].Y mismatch\n", ii );
            end
+           if( { bitcount, bits, mask } != vlc_mb_vec[ii] ) begin
+                $write("ERROR: Bitstream[%d].Y mismatch\n", ii );
+           end           
            $write("\ndut Y  recon = { ");
            for( int bb = 0; bb < 16; bb++ ) 
                $write("%0h ", recon[bb] );
@@ -295,9 +327,15 @@ module gg_process_testbench(
        cidx = 4; // cr dc
       orig = orig_mb_vec[16];
        #10;
+           if( { bitcount, bits, mask } != vlc_mb_vec[16] ) begin
+                $write("ERROR: Bitstream.DcCb mismatch\n" );
+           end           
        cidx = 5; // cb dc
        orig = orig_mb_vec[17];
        #10;
+           if( { bitcount, bits, mask } != vlc_mb_vec[17] ) begin
+                $write("ERROR: Bitstream.DcCr mismatch\n" );
+           end           
        pred = {16{12'd128}};
        cidx = 2; // cr ac
        for( int ii = 0; ii < 4; ii++ ) begin
@@ -307,6 +345,10 @@ module gg_process_testbench(
            if( recon != recon_mb_vec[16+ii] ) begin
                 $write("ERROR: recon[%d].Cb mismatch\n", ii );
            end
+           if( { bitcount, bits, mask } != vlc_mb_vec[18+ii] ) begin
+                $write("ERROR: Bitstream[%d].Cb mismatch\n", ii );
+           end           
+
            $write("\ndut Cb recon = { ");
            for( int bb = 0; bb < 16; bb++ ) 
                $write("%0h ", recon[bb] );
@@ -324,6 +366,9 @@ module gg_process_testbench(
            if( recon != recon_mb_vec[20+ii] ) begin
                 $write("ERROR: recon[%d].Cr mismatch\n", ii );
            end
+           if( { bitcount, bits, mask } != vlc_mb_vec[22+ii] ) begin
+                $write("ERROR: Bitstream[%d].Cr mismatch\n", ii );
+           end           
            $write("\ndut Cr recon = { ");
            for( int bb = 0; bb < 16; bb++ ) 
                $write("%0h ", recon[bb] );
