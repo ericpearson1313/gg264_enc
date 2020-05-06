@@ -44,8 +44,8 @@ module gg_process
     input  logic left_out_of_pic,
     output logic [6:0] overflow,
     // State I/O for external dc hold regs
-    input  logic [0:2][15:0][15:0] dc_hold,
-    output logic [0:2][15:0][15:0] dc_hold_dout,
+    input  logic [15:0][15:0] dc_hold,
+    output logic [15:0][15:0] dc_hold_dout,
     // State I/O for external neighbour nC Regs
     input  logic [0:3][7:0] above_nc_y,
     input  logic [0:1][7:0] above_nc_cb,
@@ -252,9 +252,9 @@ module gg_process
 
     always_comb begin
         for( int ii = 0; ii < 16; ii++ ) begin
-            dcoeff[ii][15:0] = ( ii == 0 && ac_flag && cr_flag ) ? dc_hold[2][{ 1'b0, bidx[1], 1'b0, bidx[0] }][15:0] : // sample 0,1,4,5
-                               ( ii == 0 && ac_flag && cb_flag ) ? dc_hold[1][{ 1'b0, bidx[1], 1'b0, bidx[0] }][15:0] : // sample 0,1,4,5
-                               ( ii == 0 && ac_flag &&  y_flag ) ? dc_hold[0][bidx[3:0]][15:0] : // luma dc coeff
+            dcoeff[ii][15:0] = ( ii == 0 && ac_flag && cb_flag ) ? dc_hold[{ 1'b0, bidx[1], 1'b0, bidx[0] }][15:0] : // sample 0,1,4,5
+                               ( ii == 0 && ac_flag && cr_flag ) ? dc_hold[{ 1'b0, bidx[1], 1'b1, bidx[0] }][15:0] : // sample 2,3,6,7
+                               ( ii == 0 && ac_flag &&  y_flag ) ? dc_hold[bidx[3:0]][15:0] : // luma dc coeff
                                                                    { {3{coeff[ii][12]}}, coeff[ii][12:0] }; // regular coeff
             dmul[ii][9:0] = { 1'b0, dquant[ii][4:0], 4'b0000 };
             dprod[ii] = dcoeff[ii] * dmul[ii]; // Signed Multiply!
@@ -378,9 +378,9 @@ module gg_process
 
     always_comb begin
         for( int ii = 0; ii < 16; ii++ ) begin
-            dc_hold_dout[0][ii][15:0] = ( dc_flag &&  y_flag ) ? m[ii][15:0] : dc_hold[0][ii][15:0];
-            dc_hold_dout[1][ii][15:0] = ( dc_flag && cb_flag ) ? m[ii][15:0] : dc_hold[1][ii][15:0];
-            dc_hold_dout[2][ii][15:0] = ( dc_flag && cr_flag ) ? m[ii][15:0] : dc_hold[2][ii][15:0];
+             dc_hold_dout[ii][15:0] = ( dc_flag &&  y_flag              || 
+                                        dc_flag && cb_flag && (ii&2)==0 ||
+                                        dc_flag && cr_flag && (ii&2)==2 ) ? m[ii][15:0] : dc_hold[ii][15:0];
         end
     end
     

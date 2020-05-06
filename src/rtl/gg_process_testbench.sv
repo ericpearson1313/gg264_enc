@@ -74,8 +74,8 @@ module gg_process_testbench(
      logic [1:0][7:0] below_nc_cr;
      logic [6:0] overflow;
      logic [4:0] num_coeff;
-     logic [0:2][15:0][15:0] dc_hold;
-     logic [0:2][15:0][15:0] dc_hold_dout;
+     logic [15:0][15:0] dc_hold;
+     logic [15:0][15:0] dc_hold_dout;
      logic [0:3][7:0] left_nc_y;    
      logic [0:1][7:0] left_nc_cb;    
      logic [0:1][7:0] left_nc_cr;
