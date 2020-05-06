@@ -467,6 +467,25 @@ int gg_process_block(int qpy, int offset, int deadzone, int *ref, int *orig, int
 	//}
 	//printf("\n");
 
+	//int lbitc = 0;
+	//for (int ii = 0; ii < vlc_idx; ii++) {
+	//	lbitc += bits->vlc[ii].i_size;
+	//}
+	//printf(" { 16'd%d, 512'b", lbitc );
+	//for (int ii = 0; ii < vlc_idx; ii++) {
+	//	printf("_");
+	//	for (int jj = bits->vlc[ii].i_size - 1; jj >= 0; jj--) {
+	//		printf("%1d", ((bits->vlc[ii].i_bits >> jj) & 1));
+	//	}
+	//}
+	//printf(" , 512'b");
+	//for (int ii = 0; ii < vlc_idx; ii++) {
+	//	for (int jj = bits->vlc[ii].i_size - 1; jj >= 0; jj--) {
+	//		printf("1");
+	//	}
+	//}
+	//printf(" } \n");
+
 	//////////////////////////////////////////
 	// Done, return num_coeff for block
 	//////////////////////////////////////////
