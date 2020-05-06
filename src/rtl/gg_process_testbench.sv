@@ -146,7 +146,8 @@ module gg_process_testbench(
  ///////////////////////////////////////////        
     
     logic [0:25][0:15][11:0] orig_mb_vec; // Very first test macroblock
-   
+    logic [0:23][0:15][ 7:0] recon_mb_vec; // frist mb recon (no chroma dc)
+       
     assign orig_mb_vec = {
         { 12'h21, 12'h24, 12'h25, 12'h2C, 12'h44, 12'h41, 12'h3E, 12'h3E, 12'h62, 12'h5C, 12'h60, 12'h5E, 12'h74, 12'h72, 12'h74, 12'h77 },
         { 12'h24, 12'h26, 12'h24, 12'h24, 12'h39, 12'h36, 12'h3E, 12'h3C, 12'h5C, 12'h61, 12'h5A, 12'h51, 12'h7A, 12'h7B, 12'h79, 12'h68 },
@@ -176,6 +177,34 @@ module gg_process_testbench(
         { 12'h87, 12'h88, 12'h85, 12'h84, 12'h88, 12'h86, 12'h84, 12'h85, 12'h87, 12'h83, 12'h86, 12'h82, 12'h85, 12'h83, 12'h84, 12'h80 }
         };
    
+   assign recon_mb_vec = {
+        { 8'h2C, 8'h2C, 8'h2C, 8'h2C, 8'h3D, 8'h3D, 8'h3D, 8'h3D, 8'h60, 8'h60, 8'h60, 8'h60, 8'h71, 8'h71, 8'h71, 8'h71 },
+        { 8'h2C, 8'h2C, 8'h2C, 8'h2C, 8'h3D, 8'h3D, 8'h3D, 8'h3D, 8'h60, 8'h60, 8'h60, 8'h60, 8'h71, 8'h71, 8'h71, 8'h71 },
+        { 8'h55, 8'h4E, 8'h52, 8'h5D, 8'h45, 8'h40, 8'h48, 8'h55, 8'h38, 8'h37, 8'h46, 8'h56, 8'h3B, 8'h3B, 8'h4E, 8'h60 },
+        { 8'h67, 8'h65, 8'h60, 8'h5E, 8'h5E, 8'h5A, 8'h52, 8'h4E, 8'h71, 8'h69, 8'h5A, 8'h53, 8'h8C, 8'h83, 8'h70, 8'h67 },
+        { 8'h32, 8'h2F, 8'h2A, 8'h27, 8'h38, 8'h35, 8'h2F, 8'h2D, 8'h44, 8'h41, 8'h3B, 8'h38, 8'h49, 8'h46, 8'h41, 8'h3E },
+        { 8'h22, 8'h19, 8'h4E, 8'h8D, 8'h26, 8'h1B, 8'h4C, 8'h89, 8'h2D, 8'h1E, 8'h49, 8'h82, 8'h31, 8'h20, 8'h47, 8'h7E },
+        { 8'h49, 8'h4C, 8'h51, 8'h54, 8'h49, 8'h4C, 8'h51, 8'h54, 8'h49, 8'h4C, 8'h51, 8'h54, 8'h49, 8'h4C, 8'h51, 8'h54 },
+        { 8'h52, 8'h46, 8'h46, 8'h52, 8'h4C, 8'h46, 8'h46, 8'h4C, 8'h51, 8'h57, 8'h57, 8'h51, 8'h5D, 8'h69, 8'h69, 8'h5D },
+        { 8'h2B, 8'h13, 8'h31, 8'h67, 8'h3A, 8'h27, 8'h41, 8'h6F, 8'h47, 8'h3B, 8'h4F, 8'h6E, 8'h45, 8'h3D, 8'h4D, 8'h64 },
+        { 8'h9A, 8'hA0, 8'h89, 8'h6C, 8'hA6, 8'hAC, 8'h95, 8'h78, 8'h9A, 8'hA1, 8'h8A, 8'h6C, 8'h83, 8'h89, 8'h72, 8'h55 },
+        { 8'h2E, 8'h1F, 8'h24, 8'h39, 8'h2E, 8'h1F, 8'h24, 8'h39, 8'h2E, 8'h1F, 8'h24, 8'h39, 8'h2E, 8'h1F, 8'h24, 8'h39 },
+        { 8'h58, 8'h61, 8'h61, 8'h58, 8'h6A, 8'h73, 8'h73, 8'h6A, 8'h7B, 8'h84, 8'h84, 8'h7B, 8'h7B, 8'h84, 8'h84, 8'h7B },
+        { 8'h4F, 8'h46, 8'h46, 8'h4F, 8'h4F, 8'h46, 8'h46, 8'h4F, 8'h4F, 8'h46, 8'h46, 8'h4F, 8'h4F, 8'h46, 8'h46, 8'h4F },
+        { 8'h65, 8'h61, 8'h5A, 8'h56, 8'h5E, 8'h5C, 8'h59, 8'h57, 8'h51, 8'h53, 8'h56, 8'h58, 8'h4B, 8'h4E, 8'h55, 8'h59 },
+        { 8'h51, 8'h51, 8'h51, 8'h51, 8'h56, 8'h56, 8'h56, 8'h56, 8'h62, 8'h62, 8'h62, 8'h62, 8'h68, 8'h68, 8'h68, 8'h68 },
+        { 8'h3D, 8'h50, 8'h68, 8'h6E, 8'h4C, 8'h6A, 8'h8D, 8'h92, 8'h6A, 8'h9E, 8'hD7, 8'hDC, 8'h79, 8'hB8, 8'hFC, 8'hFF },
+        { 8'h8A, 8'h8A, 8'h8A, 8'h8A, 8'h87, 8'h87, 8'h87, 8'h87, 8'h82, 8'h82, 8'h82, 8'h82, 8'h7F, 8'h7F, 8'h7F, 8'h7F },
+        { 8'h80, 8'h80, 8'h80, 8'h80, 8'h80, 8'h80, 8'h80, 8'h80, 8'h80, 8'h80, 8'h80, 8'h80, 8'h80, 8'h80, 8'h80, 8'h80 },
+        { 8'h7C, 8'h85, 8'h85, 8'h7C, 8'h7C, 8'h85, 8'h85, 8'h7C, 8'h7C, 8'h85, 8'h85, 8'h7C, 8'h7C, 8'h85, 8'h85, 8'h7C },
+        { 8'h7F, 8'h82, 8'h87, 8'h8A, 8'h7F, 8'h82, 8'h87, 8'h8A, 8'h7F, 8'h82, 8'h87, 8'h8A, 8'h7F, 8'h82, 8'h87, 8'h8A },
+        { 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82 },
+        { 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82 },
+        { 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82 },
+        { 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82, 8'h82 } 
+        };
+        
+        
     initial begin
     #1;
        orig = 192'h0;
@@ -248,6 +277,17 @@ module gg_process_testbench(
            bidx[3:0] = ii;
            orig = orig_mb_vec[ii];
            #10;
+           if( recon != recon_mb_vec[ii] ) begin
+                $write("ERROR: Recon[%d].Y mismatch\n", ii );
+           end
+           $write("\ndut Y  recon = { ");
+           for( int bb = 0; bb < 16; bb++ ) 
+               $write("%0h ", recon[bb] );
+           $write(" }\n");
+           $write( "ref Y  recon = { ");
+           for( int bb = 0; bb < 16; bb++ ) 
+               $write("%0h ", recon_mb_vec[ii][bb] );
+           $write(" }\n");
        end 
        bidx = 0;
        cidx = 4; // cr dc
@@ -261,18 +301,36 @@ module gg_process_testbench(
            bidx[3:0] = ii;
            orig = orig_mb_vec[18+ii];
            #10;
+           if( recon != recon_mb_vec[16+ii] ) begin
+                $write("ERROR: recon[%d].Cb mismatch\n", ii );
+           end
+           $write("\ndut Cb recon = { ");
+           for( int bb = 0; bb < 16; bb++ ) 
+               $write("%0h ", recon[bb] );
+           $write(" }\n");
+           $write( "ref Cb recon = { ");
+           for( int bb = 0; bb < 16; bb++ ) 
+               $write("%0h ", recon_mb_vec[16+ii][bb] );
+           $write(" }\n");
        end
        cidx = 3; // cb ac
        for( int ii = 0; ii < 4; ii++ ) begin
            bidx[3:0] = ii;
            orig = orig_mb_vec[22+ii];
            #10;
+           if( recon != recon_mb_vec[20+ii] ) begin
+                $write("ERROR: recon[%d].Cr mismatch\n", ii );
+           end
+           $write("\ndut Cr recon = { ");
+           for( int bb = 0; bb < 16; bb++ ) 
+               $write("%0h ", recon[bb] );
+           $write(" }\n");
+           $write( "ref Cr recon = { ");
+           for( int bb = 0; bb < 16; bb++ ) 
+               $write("%0h ", recon_mb_vec[20+ii][bb] );
+           $write(" }\n");
        end
        #50;
-               
-       
-       
-       
     end
 
 endmodule

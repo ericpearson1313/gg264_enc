@@ -817,7 +817,6 @@ module gg_process
 endmodule
 
 // Concatenate 2 VLC's
-// A 512 bit concatenate is reasonable assuming logic reduciton by synth tool (validate!)
 module vlc_cat
 #(
     // Required
