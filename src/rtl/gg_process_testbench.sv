@@ -289,13 +289,16 @@ module gg_process_testbench(
                $write("%0h ", recon_mb_vec[ii][bb] );
            $write(" }\n");
        end 
+       // chroma dc pred
+       pred = {12'h800, 12'h0, 12'h800, 12'h0, 12'h0, 12'h0, 12'h0, 12'h0, 12'h800, 12'h0, 12'h800, 12'h0, 12'h0, 12'h0, 12'h0, 12'h0 };
        bidx = 0;
        cidx = 4; // cr dc
-       orig = orig_mb_vec[16];
+      orig = orig_mb_vec[16];
        #10;
        cidx = 5; // cb dc
        orig = orig_mb_vec[17];
        #10;
+       pred = {16{12'd128}};
        cidx = 2; // cr ac
        for( int ii = 0; ii < 4; ii++ ) begin
            bidx[3:0] = ii;

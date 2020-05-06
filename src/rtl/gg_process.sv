@@ -113,7 +113,7 @@ module gg_process
             e[col + 4 * 1][18:0] = { {2{d[col + 4 * 2][16]}}, d[col + 4 * 2][16:0] } +(( dc_flag ) ? { {2{d[col + 4 * 3][16]}},  d[col + 4 * 3][16:0]       } : 
                                                                                                      {    d[col + 4 * 3][16]  ,  d[col + 4 * 3][16:0], 1'b0 });
             e[col + 4 * 2][18:0] = { {2{d[col + 4 * 0][16]}}, d[col + 4 * 0][16:0] } -               { {2{d[col + 4 * 1][16]}},  d[col + 4 * 1][16:0]       } ;
-            e[col + 4 * 3][18:0] = { {2{d[col + 4 * 3][16]}}, d[col + 4 * 3][16:0] } -(( dc_flag ) ? { {2{d[col + 4 * 2][16]}},  d[col + 4 * 2][16:0], 1'b0 } : 
+            e[col + 4 * 3][18:0] = { {2{d[col + 4 * 3][16]}}, d[col + 4 * 3][16:0] } -(( dc_flag ) ? { {2{d[col + 4 * 2][16]}},  d[col + 4 * 2][16:0]       } : 
                                                                                                      {    d[col + 4 * 2][16]  ,  d[col + 4 * 2][16:0], 1'b0 });
         end    
     end
@@ -188,7 +188,7 @@ module gg_process
         for( int ii = 0; ii < 16; ii++ ) begin
             negcoeff[ii]       =   e[ii][18];
             abscoeff[ii][18:0] = ( e[ii][18] ) ? ( ~e[ii][18:0] + 19'd1 ) : e[ii][18:0];
-            quant_prod[ii][32:0]   = abscoeff[ii][18:0] * quant[ii][13:0];
+            quant_prod[ii][32:0]   = abscoeff[ii][18:0] * quant[(dc_flag)?0:ii][13:0];
             quant_shift1[ii][25:0] = ( !ch_flag && dc_flag ) ? { 2'b0, quant_prod[ii][32:9] } : 
                                      (  ch_flag && dc_flag ) ? { 1'b0, quant_prod[ii][32:8] } :
                                                                {       quant_prod[ii][32:7] } ;
