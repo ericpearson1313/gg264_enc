@@ -138,8 +138,6 @@ module gg_process_timing_wrapper(
          qpy <= qpy_d;
          cidx <= cidx_d;
          bidx <= bidx_d;
-         sad <= sad_q;
-         ssd <= ssd_q;
          abv_out_of_pic <= abv_out_of_pic_d;
          left_out_of_pic <= left_out_of_pic_d;
          end
@@ -148,6 +146,8 @@ module gg_process_timing_wrapper(
     
     always_ff @(posedge clk) begin
           recon_q <= recon;
+          sad_q <= sad;
+          ssd_q <= ssd;
           bitcount_q <= bitcount;
           bits_q <= bits;
           mask_q <= mask;
