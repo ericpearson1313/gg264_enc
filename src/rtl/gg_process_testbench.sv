@@ -235,7 +235,6 @@ module gg_process_testbench(
         };  
        
     initial begin
-    #1;
        orig = 192'h0;
        pred = 192'h0;
        offset = 8'h0;
@@ -248,30 +247,30 @@ module gg_process_testbench(
 
        
        // startup delay (for future reset)
-       #100; // 10 cycles
+       for( int ii = 0; ii < 10; ii++ ) @(posedge clk); // 10 cycles
 
        // Step thru a basic (all zero) MB
        cidx = 0; // Luma
        for( int ii = 0; ii < 16; ii++ ) begin
            bidx[3:0] = ii;
-           #10;
+           @(posedge clk);
        end 
        bidx = 0;
        cidx = 4; // cr dc
-       #10;
+       @(posedge clk);
        cidx = 5; // cb dc
-       #10;
+       @(posedge clk);
        cidx = 2; // cr ac
        for( int ii = 0; ii < 4; ii++ ) begin
            bidx[3:0] = ii;
-           #10;
+           @(posedge clk);
        end
        cidx = 3; // cb ac
        for( int ii = 0; ii < 4; ii++ ) begin
            bidx[3:0] = ii;
-           #10;
+           @(posedge clk);
        end
-       #50;
+       for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
        
        // Step thru a real block, for visual debug
        
@@ -287,11 +286,11 @@ module gg_process_testbench(
        bidx = 4'd0;
        abv_out_of_pic  = 1'b1;
        left_out_of_pic = 1'b1;
-        #10;
-        #50;
+       @(posedge clk);
+       for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
        
 
-       // Step thru 1st full pintra macroblock, visual debug
+       // Step thru 1st full pintra macroblock, with checking 
        pred = {16{12'd128}};
        offset = 8'h0;
        deadzone = 16'h00;
@@ -305,12 +304,14 @@ module gg_process_testbench(
        for( int ii = 0; ii < 16; ii++ ) begin
            bidx[3:0] = ii;
            orig = orig_mb_vec[ii];
-           #10;
+           @(negedge clk);
            if( recon != recon_mb_vec[ii] ) begin
                 $write("ERROR: Recon[%d].Y mismatch\n", ii );
            end
            if( { bitcount, bits, mask } != vlc_mb_vec[ii] ) begin
-                $write("ERROR: Bitstream[%d].Y mismatch\n", ii );
+                $write("ERROR: Bitstream[%0d].Y mismatch\n", ii );
+                $write("  ref: %0d %0h %0h\n", bitcount, bits, mask );
+                $write("  vec: %0d %0h %0h\n", vlc_mb_vec[ii][1032:1024], vlc_mb_vec[ii][1023:512], vlc_mb_vec[ii][511:0] );
            end           
            $write("\ndut Y  recon = { ");
            for( int bb = 0; bb < 16; bb++ ) 
@@ -320,28 +321,31 @@ module gg_process_testbench(
            for( int bb = 0; bb < 16; bb++ ) 
                $write("%0h ", recon_mb_vec[ii][bb] );
            $write(" }\n");
+           @(posedge clk);
        end 
        // chroma dc pred
        pred = {12'h800, 12'h0, 12'h800, 12'h0, 12'h0, 12'h0, 12'h0, 12'h0, 12'h800, 12'h0, 12'h800, 12'h0, 12'h0, 12'h0, 12'h0, 12'h0 };
        bidx = 0;
        cidx = 4; // cr dc
       orig = orig_mb_vec[16];
-       #10;
+           @(negedge clk);
            if( { bitcount, bits, mask } != vlc_mb_vec[16] ) begin
                 $write("ERROR: Bitstream.DcCb mismatch\n" );
            end           
+           @(posedge clk);
        cidx = 5; // cb dc
        orig = orig_mb_vec[17];
-       #10;
+           @(negedge clk);
            if( { bitcount, bits, mask } != vlc_mb_vec[17] ) begin
                 $write("ERROR: Bitstream.DcCr mismatch\n" );
            end           
+           @(posedge clk);
        pred = {16{12'd128}};
        cidx = 2; // cr ac
        for( int ii = 0; ii < 4; ii++ ) begin
            bidx[3:0] = ii;
            orig = orig_mb_vec[18+ii];
-           #10;
+           @(negedge clk);
            if( recon != recon_mb_vec[16+ii] ) begin
                 $write("ERROR: recon[%d].Cb mismatch\n", ii );
            end
@@ -357,12 +361,13 @@ module gg_process_testbench(
            for( int bb = 0; bb < 16; bb++ ) 
                $write("%0h ", recon_mb_vec[16+ii][bb] );
            $write(" }\n");
+           @(posedge clk);
        end
        cidx = 3; // cb ac
        for( int ii = 0; ii < 4; ii++ ) begin
            bidx[3:0] = ii;
            orig = orig_mb_vec[22+ii];
-           #10;
+           @(negedge clk);
            if( recon != recon_mb_vec[20+ii] ) begin
                 $write("ERROR: recon[%d].Cr mismatch\n", ii );
            end
@@ -377,8 +382,9 @@ module gg_process_testbench(
            for( int bb = 0; bb < 16; bb++ ) 
                $write("%0h ", recon_mb_vec[20+ii][bb] );
            $write(" }\n");
+           @(posedge clk);
        end
-       #50;
+       for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
     end
 
 endmodule
