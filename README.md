@@ -59,25 +59,19 @@ It is sufficient, for now, to provides a means to functionally bring up the tran
 RTL has been written for the transform block rate-distortion process module. 
 System Verilog was used with syntax checking provided in Vivado IDE 2018.3 running on desktop.
 
-### Synthesis
-Interactive Vivado 2019.2 synthesis on AWS EC2 r5.large instance starting from FPGA Developer AMI AMI v1.8.2, using vivado 2019.2.
- 
-First synth run: Started the r5.large EC2 instance with the AMI, installed the DVC gui, and ran vivado interactively, and was able to get the process core through its first 2hr out-of-context synthesis.
-
-Synthesis itterations, cleared or validated most all synth warnings. 
-Process core module level synth size, before functional validation is: 
-
-28018 LUTs, 464 FFs, 48 DSPs  (Feels too small in luts, but we'll see ....)
-
-Module synthesis elapse time is 17 min on the r5.large instance.
-
 ### Simulation
 
 Minimal testbench added. Simulated using Vivado IDE 2018.3 running on desktop.
+testcase MB0, 1st macroblock passing match with model.
 
-testcase #0 :  Full macroblock, above/left out of picture, otherwise all zero inputs. observed outputs, (and fixed errors).
+### Synthesis
+Interactive Vivado 2019.2 synthesis on AWS EC2 r5.large instance starting from FPGA Developer AMI AMI v1.8.2, using vivado 2019.2.
 
-next: add model generated data file, along with testbench: file read, stimulate, and ouput checking 
+With most all warning removed and passing sims, the gg_process module is:
+
+30586 Luts, and 48 DSP. At minimum 384 FF are needed for above/left/dc state.
+
+
 
 
 
