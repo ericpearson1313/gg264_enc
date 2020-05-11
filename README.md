@@ -40,6 +40,7 @@ This is where hardware development will start. This process module will be intia
 Synthesis results will give area and timing. Then simulation will be used to functionally bring up the module. Timing and area optimization will follow. 
 After which, the design will be pipelined to increase its throughput. At the earlies convenient time, a function video codec will be designed, with features added after.
 
+![doc/ggenc_prelim_arch.png](doc/ggenc_prelim_arch.png "Architecture Diagram" )
 
 ## Planning
 follow a process spiral of: plan, model, design, synthesis, simulate on each of the following:
