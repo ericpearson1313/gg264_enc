@@ -35,10 +35,11 @@ Since then I've been reducing the minimum hardware feature set for a first worki
 where the video encoder can be run at realtime to measure performance and latency.
 
 ### Core Process module
-A minimal hardware enocder, with the maximum potential, is centered around a transform block rate-distortion process encoder.
+A minimal hardware encoder, with the maximum potential, is centered around a transform block rate-distortion process encoder.
 This is where hardware development will start. This process module will be intially implementented and verified as combinatorial logic.
 Synthesis results will give area and timing. Then simulation will be used to functionally bring up the module. Timing and area optimization will follow. 
-After which, the design will be pipelined to increase its throughput. At the earlies convenient time, a function video codec will be designed, with features added after.
+After which, the design will be pipelined to increase its throughput. A minimum viable functional video codec system will be designed to enable full rate operation
+and enable measurments of performance and latency. Later, as time permits, more features can be added.
 
 ![doc/ggenc_prelim_arch.png](doc/ggenc_prelim_arch.png "Architecture Diagram" )
 
