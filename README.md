@@ -7,7 +7,7 @@ Open source verilog for a FPGA hardware WebVC Video Encoder.
 
 ## Purpose
 
-Create a running encoder as a platform to showcase FPGA optimizations in areas of low latency, high throuput, and HLS synthesis.
+Create a running encoder as a platform to showcase FPGA optimizations in areas of low latency and high throuput.
 
 Provide an example design of a minimum viable H.264 hardware real-time video encoder with rate-control. 
 
@@ -69,9 +69,9 @@ testcase MB0, 1st macroblock passing match with model.
 ### Synthesis
 Interactive Vivado 2019.2 synthesis on AWS EC2 r5.large instance starting from FPGA Developer AMI AMI v1.8.2, using vivado 2019.2.
 
-With most all warning removed and passing sims, the gg_process module is:
+With most all warnings resolved and passing bringup sims, the gg_process module black box synthesis took under 20 minutes and resulted in:
 
-30586 Luts, and 48 DSP. At minimum 384 FF are needed for above/left/dc state.
+30586 Luts, and 48 DSP. Of course 384 FFs are needed for above/left/dc state.
 
 
 
