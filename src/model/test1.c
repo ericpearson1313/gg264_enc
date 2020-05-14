@@ -66,6 +66,7 @@ void ggo_emulation_prev_putc( char obyte )
         printf("*EMU* ");
     }
     fputc(obyte, ggo_fp);
+//    printf("%02x ", obyte & 0xff);
     if (obyte == 0)
         ggo_prev_zero++;
     else
@@ -80,7 +81,6 @@ void ggo_putbit(int bit)
     ggo_char |= ((bit!=0)?1:0) << pos;
     if (pos == 0) {
         ggo_emulation_prev_putc( ggo_char );
-//        printf("%02x ", ggo_char & 0xff );
         ggo_char = 0;
     }
     ggo_bitpos = pos;
@@ -913,13 +913,21 @@ int main()
     recon_copy_to_ref(0); // actually where decoder will have it
     recon_copy_to_ref(1); // after next frame this will be avaiable long term
 
-    // Ref0 P frames
+    // Grey Skip frame (which puts our long term ref into slot 1
     ggo_sequence_parameter_set();
     ggo_picture_parameter_set();
-    ggi_read_frame();
-    ggo_inter_0_0_slice(29, 0, 0); // ref0 pintra frame
+    ggo_pskip_slice(); 
     recon_write_yuv();
     recon_copy_to_ref(0);
+
+    // Ref0 P frames
+    // ggo_sequence_parameter_set();
+    // ggo_picture_parameter_set();
+    // ggi_read_frame();
+    // ggo_inter_0_0_slice(29, 0, 0); // ref0 pintra frame
+    // recon_write_yuv();
+    // recon_copy_to_ref(0);
+
     for (int ii = 0; ii < 20; ii++) {
         ggo_sequence_parameter_set();
         ggo_picture_parameter_set();
