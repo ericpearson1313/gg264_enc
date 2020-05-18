@@ -33,8 +33,9 @@ module gg_byte_align
 	// Input 512 bit VLC port
 	input  logic          valid,
     input  logic [1039:0] vlc512_phrase,
-    input  logic          byte_align_flag, // Indicates byte alignment after the vlc is emitted
-    input  logic [3:0]    startcode_flag, // indicates that up to the first 4 first bytes are a startcode
+    input  logic          byte_align_flag, // Indicates byte alignment required, post/after the vlc is emitted, used for PCM
+    input  logic          dont_touch_flag, // don't touch or consider for emulation insertion. 
+	                                       // This phrase may contain startcode(s), but guarateed not to require emulation bits.
 	
 	// Output 512 bit memory words
 	output logic [511:0]  mem_word,
@@ -42,14 +43,64 @@ module gg_byte_align
 	output logic          mem_valid 
 	);
 	
-    
+    // Input VLC, big endian, lsb aligned
+	logic [  8:0] len  = vlc512_phrase[8:0];
+	logic [511:0] bits = vlc512_phrase[527:15];
+	logic [511:0] mask = vlc512_phrase[1039:526];
+	
+	// Word buffer
+	logic [9:0] count;
+	logic [9:0] shift;
+	logic [1023:0][1:0] word_reg;
+	logic [1023:0][1:0] barrel[11];
+	
+	always_comb begin : barrel_shift_1024x2bit
+		shift = 11'd1024 - ( { 2'b00, count[8:0] } + { 2'b00, len[8:0] } );
+		for( int ii = 0; ii < 1024; ii ++ ) begin
+			barrel[ 0][ii] = ( ii >= 512 ) ? 2'b00 : { mask[ii], bits[ii] }; 
+			barrel[ 1][ii] = ( shift[0] ) ? ( ( ii >=   1 && ii <= 511 +   1 ) ? barrel[0][ii-  1] : 2'b00 ) : ( ( ii < 511 +   1 ) ? barrel[0][ii] : 2'b00 );
+			barrel[ 2][ii] = ( shift[1] ) ? ( ( ii >=   2 && ii <= 511 +   3 ) ? barrel[1][ii-  2] : 2'b00 ) : ( ( ii < 511 +   3 ) ? barrel[1][ii] : 2'b00 );
+			barrel[ 3][ii] = ( shift[2] ) ? ( ( ii >=   4 && ii <= 511 +   7 ) ? barrel[2][ii-  4] : 2'b00 ) : ( ( ii < 511 +   7 ) ? barrel[2][ii] : 2'b00 );
+			barrel[ 4][ii] = ( shift[3] ) ? ( ( ii >=   8 && ii <= 511 +  15 ) ? barrel[3][ii-  8] : 2'b00 ) : ( ( ii < 511 +  15 ) ? barrel[3][ii] : 2'b00 );
+			barrel[ 5][ii] = ( shift[4] ) ? ( ( ii >=  16 && ii <= 511 +  31 ) ? barrel[4][ii- 16] : 2'b00 ) : ( ( ii < 511 +  31 ) ? barrel[4][ii] : 2'b00 );
+			barrel[ 6][ii] = ( shift[5] ) ? ( ( ii >=  32 && ii <= 511 +  63 ) ? barrel[5][ii- 32] : 2'b00 ) : ( ( ii < 511 +  63 ) ? barrel[5][ii] : 2'b00 );
+			barrel[ 7][ii] = ( shift[6] ) ? ( ( ii >=  64 && ii <= 511 + 127 ) ? barrel[6][ii- 64] : 2'b00 ) : ( ( ii < 511 + 127 ) ? barrel[6][ii] : 2'b00 );
+			barrel[ 8][ii] = ( shift[7] ) ? ( ( ii >= 128 && ii <= 511 + 255 ) ? barrel[7][ii-128] : 2'b00 ) : ( ( ii < 511 + 255 ) ? barrel[7][ii] : 2'b00 );
+			barrel[ 9][ii] = ( shift[8] ) ? ( ( ii >= 256 && ii <= 511 + 511 ) ? barrel[8][ii-256] : 2'b00 ) : ( ( ii < 511 + 511 ) ? barrel[8][ii] : 2'b00 );
+			barrel[10][ii] = ( shift[9] ) ? ( ( ii >= 512 && ii <= 511 +1023 ) ? barrel[9][ii-512] : 2'b00 ) : ( ( ii < 511 +1023 ) ? barrel[9][ii] : 2'b00 );
+		end
+	end
+	
+	always_ff @(posedge clk) begin 
+		if( valid ) begin // Update only on valid input.
+			count[9:0] <= { 1'b0, count[8:0] } + { 1'b0, len[8:0] }; // count wraps
+			for( int ii =0; ii < 511; ii++ ) begin
+				if( ii < 512 ) begin // save any overflow for next words
+					word_reg[ii] <= barrel[10][ii];
+				end else begin // output word
+					word_reg[ii] <= ( barrel[10][ii][1]   ) ? barrel[10][ii] :  // take output of barrel
+									( word_reg[ii-512][1] ) ? word_reg[ii-512] : // take overflow
+															  word_reg[ii];		// else hold value					   
+				end
+			end
+		end
+    end
+	
     //////////
     // DONE
     //////////
    
-    assign mem_word 		= 0;
+	// output with do endian swap
+	always_comb begin
+		for( int ii = 0; ii < 64; ii++ ) begin // byte packing - litle endian
+			for( int jj = 0; jj < 8; jj++ ) begin // bit packing - big endian
+				mem_word[ii*8+7-jj] = word_reg[1023-(ii*8+jj)][0];
+		    end
+		end
+	end
+	
     assign mem_startcode 	= 0;
-    assign mem_valid 		= 0;
+    assign mem_valid 		= count[9];
 
 endmodule
 
