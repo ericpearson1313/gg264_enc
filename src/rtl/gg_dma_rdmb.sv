@@ -28,6 +28,7 @@ module gg_dma_rdmb
     )
     (
     input  logic clk,
+    input  logic reset,
     // 32-bit Axi-L register port
     // AR
     input  logic         s_arvalid ,
@@ -77,20 +78,26 @@ module gg_dma_rdmb
 	               S_READ           = 1,
 	               S_WRITE          = 2,
 	               S_RESP           = 3,
-                   S_RUN            = 2;
+	               S_START          = 4,
+                   S_VALID          = 5,
+                   S_NEXT           = 6;
 				  
 	
     logic [63:0] dma_base_addr, dma_limit_addr, dma_read_addr, dma_write_addr;
     logic go_reg, cont_reg;
     logic [7:0] laraddr, lawaddr;
-    logic [3:0] rstate;
+    logic [3:0] rstate; 
     logic [3:0] wstate;
+    logic [3:0] astate; 
     logic we;
-
+    logic done_flag;
+    logic [39:0] curr_addr;
+    logic [7:0] curr_len;
+    logic go_reg_del;
+   
     // AXI-L Read State machine
     
-    always_ff @(posedge clk) begin
-    
+    always_ff @(posedge clk) begin 
         case( rstate ) 
         S_IDLE: begin
             if( s_arvalid ) begin
@@ -115,7 +122,7 @@ module gg_dma_rdmb
     assign s_rresp = 2'b00;
     assign s_arready = ( rstate == S_IDLE ) ? 1'b1 : 1'b0;
     assign s_rvalid  = ( rstate == S_READ ) ? 1'b1 : 1'b0;
-    assign s_rdata = ( laraddr == 'h00 ) ? { 30'h0, cont_reg, go_reg } :
+    assign s_rdata = ( laraddr == 'h00 ) ? { 29'h0, done_flag, cont_reg, go_reg } :
                      ( laraddr == 'h04 ) ? { 32'h0 } :
                      ( laraddr == 'h08 ) ? dma_base_addr[31:0] :
                      ( laraddr == 'h0C ) ? dma_base_addr[63:32] :
@@ -129,8 +136,9 @@ module gg_dma_rdmb
                                                                  
     // AXI-L write state machine
     
-    always_ff @(posedge clk) begin
+    assign done_flag = ( astate == S_IDLE ) ? 1'b1 : 1'b0;
     
+    always_ff @(posedge clk) begin
         case( wstate ) 
         S_IDLE: begin
             if( s_awvalid & s_wvalid ) begin
@@ -171,25 +179,56 @@ module gg_dma_rdmb
         dma_read_addr[63:32]  <= ( we && lawaddr == 'h1C ) ? s_wdata :  dma_read_addr[63:32];
         dma_write_addr[31: 0] <= ( we && lawaddr == 'h20 ) ? s_wdata :  dma_write_addr[31:0];
         dma_write_addr[63:32] <= ( we && lawaddr == 'h04 ) ? s_wdata :  dma_write_addr[63:32];
-        { cont_reg, go_reg }  <= ( we && lawaddr == 'h04 ) ? s_wdata[1:0] : { cont_reg, go_reg };
+        cont_reg              <= ( we && lawaddr == 'h00 ) ? s_wdata[1] :  cont_reg;
+        go_reg                <= ( we && lawaddr == 'h00 ) ? s_wdata[0] :  go_reg;
     end
     
     // DMA Read Address State Machine
-    
+    // 
+    // Simplifying Assumtions: base addr is 4K aligned. Limit is 128 byte aligned, no write pointer (yet)
     // For Recon, just re-read the same buffer again (ignore write pointer, guranteed valid)
-    // For orig, watch write pointer, and wait for it when reached. Status should show waiting for write
-    // Dropping go means stop generating accesses? (what about data in flight, and clean end)
-    
-    // << TODO >>
-    
+    // For orig, just load the entire frame sequence in dram, and set limit. 16 Gbytes give over 5000 frames
+    // Dropping go not supported
+    //
+ 
+    always_ff @(posedge clk) begin 
+        go_reg_del <= go_reg;
+        case( astate ) 
+        S_IDLE: begin
+            if( go_reg && !go_reg_del) begin
+                astate <= S_START;
+            end
+        end
+        
+        S_START: begin
+            astate <= S_VALID;
+        end
+        
+        S_VALID: begin
+            if( m_arvalid & m_arready && curr_addr[39:12] == dma_limit_addr[39:12] ) begin // done last transfer
+                astate <= ( cont_reg ) ? S_START : S_IDLE;
+            end else begin
+                astate <= S_VALID;
+            end
+        end
+        endcase
+
+        if( astate == S_START ) begin
+            curr_addr <= { dma_base_addr[39:12], 12'h000 };
+            curr_len  <= 'hFF; // 256 beat, 4K burst to start always
+        end else if ( m_arvalid & m_arready ) begin
+            curr_addr <= curr_addr + 4096;
+            curr_len <= ( curr_addr[39:12] == dma_limit_addr[39:9] ) ? { dma_limit_addr[11:7], 3'b111 } : 'hff;
+        end
+    end
+   
     // DMA Read address port
     
-    assign  m_arvalid = 1'b0;
-    assign  m_araddr  = 40'h0;
-    assign  m_arlen   = 8'h0;
+    assign  m_arvalid = ( astate == S_VALID ) ? 1'b1 : 1'b0;
+    assign  m_araddr  = curr_addr[39:0];
+    assign  m_arlen   = curr_len[7:0];
     assign  m_arsize  = 3'b100; // 128 bit = 16 byte per beat transfers
     assign  m_arcache = 4'b0000; // Determine correct one, Look in Xilinx interconnect IP docs for recommended
-
 
     // Wire in the chroma DC Calc
     // No real reason to have this inside the DMA
@@ -198,16 +237,17 @@ module gg_dma_rdmb
     chdc_calc   chroma_dc_
     (
         .clk     ( clk ),
-        // in from dram read port
+        .reset   ( reset ),
+        // in from dram read port, 24 cycles/mb
         .s_valid ( m_rvalid  ),
         .s_ready ( m_rready  ),
         .s_data  ( m_rdata   ),
-        .s_last  ( m_rlast   ),
-        // out to module stream out port
+        .s_last  ( 1'b0      ),  // last from mem cannot be used to signal last MB due to 4k boudnaries
+        // out to module stream out port, 26 cycles/mb
         .m_valid ( m_valid   ),
         .m_ready ( m_ready   ),
         .m_data  ( m_data    ),
-        .m_last  ( m_last    )
+        .m_last  ( m_last    )  // generated as last beat of each macrtoblock. Every 26 cycles
     );
         
 endmodule
@@ -223,6 +263,7 @@ module chdc_calc
  )
  (
 	input  logic  		 clk,
+	input  logic         reset,
 	// Input port (24 cyc/mb)
 	output logic         s_ready,
 	input  logic         s_valid,
