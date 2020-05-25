@@ -108,7 +108,7 @@ module gg_pcm_buf
 		
     // Srams
 	
-	sram_1r1w #( 32, 64, 6 ) sram_0 
+	gg_sram_1r1w #( 32, 64, 6 ) sram_0 
 		(
 			.clk	( clk ),
 			.raddr	( {  bank, raddr[0][4:0] } ),
@@ -118,7 +118,7 @@ module gg_pcm_buf
 			.qout	( rdata[0][31:0] )
 		);
 		
-	sram_1r1w #( 32, 64, 6 ) sram_1 
+	gg_sram_1r1w #( 32, 64, 6 ) sram_1 
 		(
 			.clk	( clk ),
 			.raddr	( {  bank, raddr[1][4:0] } ),
@@ -128,7 +128,7 @@ module gg_pcm_buf
 			.qout	( rdata[1][31:0] )
 		);
 
-	sram_1r1w #( 32, 64, 6 ) sram_2 
+	gg_sram_1r1w #( 32, 64, 6 ) sram_2 
 		(
 			.clk	( clk ),
 			.raddr	( {  bank, raddr[2][4:0] } ),
@@ -138,7 +138,7 @@ module gg_pcm_buf
 			.qout	( rdata[2][31:0] )
 		);
 
-	sram_1r1w #( 32, 64, 6 ) sram_3 
+	gg_sram_1r1w #( 32, 64, 6 ) sram_3 
 		(
 			.clk	( clk ),
 			.raddr	( {  bank, raddr[3][4:0] } ),
@@ -151,7 +151,7 @@ module gg_pcm_buf
 endmodule
 
 // synchronous Sram with separate read and write ports
-module sram_1r1w
+module gg_sram_1r1w
  #(
 	parameter int WIDTH = 32,
 	parameter int WORDS = 64,
