@@ -21,7 +21,7 @@
 // AXI4 128-bit Master Read port - 128-bit video 4x4 pel blocks, in encode order, 24 transfers/macroblock
 // AXI Master Stream port - 128 bit video, 4x4 pel blocks, in encode order with added chroma DC blocks,  26 transfers/macroblock
 
-module gg_dma_rdmb
+module gg_dma_rd2d
    #(
      parameter int BIT_LEN               = 17,
      parameter int WORD_LEN              = 16
