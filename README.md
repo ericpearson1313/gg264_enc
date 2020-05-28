@@ -19,12 +19,12 @@ Using the MPEG WebVC video standard, "ISO/IEC 14496 Part 29: Web video coding"
 ## Platform
 Use AWS cloud fpgas, with their EC2 f1.2xlarge FPGA instances (Xilinx Vu9p) available on-demand. 
 The runtime cost of $1.65/hr is affordable for hobbyist development. The 'F1 provides an available uniform platform for both open source hardware experimentation and scale deployment.
-FPGA development tools are available at $0 additional cost, provided as an AMI to when creating new EC2 instances.
+FPGA development tools are available at $0 additional cost and provided as an AMI when creating new EC2 instances.
 
 ### EC2 Instances Emmployed
 - f1.2xlarge - $1.65/hr - FPGA runtime instance
-- r5.xlarge  - $0.25/hr - Full chip FPGA synthesis 
-- r5.large   - $0.12/hr - Interactive block level synthesis sessions for $1/day
+- r5.xlarge  - $0.25/hr - Full chip FPGA synthesis needs a 32GBytes instance. (There are faster, but this is the lowest $/build). 
+- r5.large   - $0.12/hr - Interactive block level synthesis sessions for $1/day, works fine with a 16Gbyte instance.
 
 ## Specifications
 
@@ -33,6 +33,7 @@ for my intitial thoughts.
 
 Since then I've been reducing the minimum hardware feature set for a first working version, 
 where the video encoder can be run at realtime to measure performance and latency.
+I gave a progress update talk [doc/webvc_update_may2020_v2.pdf](doc/webvc_update_may2020_v2.pdf) which reflects my current planning and thoughts.
 
 ### Core Process module
 A minimal hardware encoder, with the maximum potential, is centered around a transform block rate-distortion process encoder.
