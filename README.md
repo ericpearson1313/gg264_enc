@@ -69,9 +69,9 @@ The setpoint inputs are the desired qp and the peak bitrate allowed (CVBR), meas
 
 A video quality offset state, and a estimated total LAB bit count sum.
 
-The video input is pre-encoded at the offset setpoint quality, and the bitrate recorded, and used to estimate the bitrate at other quality offsets. A qp offset of 6, doubles/halves the quantizer, which directly affects the bitrate. Finer control of the bits is available with quantization rouding controls.
+The video input is pre-encoded at the offset setpoint quality, and the bitrate recorded, and used to estimate the bitrate at other quality offsets. A qp offset of 6, doubles/halves the quantizer, which directly affects the bitrate. Finer control of the bits is available with quantization rounding controls.
 
-The estimated total is updated with the assition of the newest macroblock bitcount, while subtraction the oldest macroblock actual bitcount. Bits added for byte aligned, or emuation 0x03 insertion are added. The LAB window rolls over pictures and slices and includes the slice header as well as any parameter set nals.
+The estimated total is updated with the addition of the newest macroblock bitcount, while subtraction the oldest macroblock actual bitcount. Bits added for byte aligned, or emuation 0x03 insertion are added. The LAB window rolls over pictures and slices and includes the slice header as well as any parameter set nals.
 
 If the LAB bits are greater than the limit, then the macroblock qp's are increased until the lab bits fall within the limit (capped).
 
