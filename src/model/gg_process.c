@@ -1,32 +1,7 @@
 #include <stdio.h>
 #include "gg_process.h"
 
-#define CLIP3(x,y,z) (((z)<(x))?(x):((z)>(y))?(y):(z))
-#define CLIP1(z) CLIP3(0,255,(z))
-#define SSD(x) ((x)*(x))
-#define SAD(x) ((x<0)?(-(x)):(x))
-#define ABS(x) ((x<0)?(-(x)):(x))
-#define MIN(x,y) ((x)<(y)?(x):(y))
-#define MAX(x,y) ((x)>(y)?(x):(y))
-
-const int Qmat[6][4][4] = { { { 13107, 8066, 13107, 8066 }, { 8066, 5243, 8066, 5243 }, { 13107, 8066, 13107, 8066 }, { 8066, 5243, 8066, 5243} },
-						    { { 11916, 7490, 11916, 7490 }, { 7490, 4660, 7490, 4660 }, { 11916, 7490, 11916, 7490 }, { 7490, 4660, 7490, 4660} },
-						    { { 10082, 6554, 10082, 6554 }, { 6554, 4194, 6554, 4194 }, { 10082, 6554, 10082, 6554 }, { 6554, 4194, 6554, 4194} },
-						    { { 9362 , 5825, 9362 , 5825 }, { 5825, 3647, 5825, 3647 }, { 9362 , 5825, 9362 , 5825 }, { 5825, 3647, 5825, 3647} },
-						    { { 8192 , 5243, 8192 , 5243 }, { 5243, 3355, 5243, 3355 }, { 8192 , 5243, 8192 , 5243 }, { 5243, 3355, 5243, 3355} },
-						    { { 7282 , 4559, 7282 , 4559 }, { 4559, 2893, 4559, 2893 }, { 7282 , 4559, 7282 , 4559 }, { 4559, 2893, 4559, 2893} } };
-
-const int Dmat[6][4][4] = { { { 10, 13, 10, 13 }, { 13, 16, 13, 16 }, { 10, 13, 10, 13 }, { 13, 16, 13, 16} },
-						    { { 11, 14, 11, 14 }, { 14, 18, 14, 18 }, { 11, 14, 11, 14 }, { 14, 18, 14, 18} },
-						    { { 13, 16, 13, 16 }, { 16, 20, 16, 20 }, { 13, 16, 13, 16 }, { 16, 20, 16, 20} },
-						    { { 14, 18, 14, 18 }, { 18, 23, 18, 23 }, { 14, 18, 14, 18 }, { 18, 23, 18, 23} },
-						    { { 16, 20, 16, 20 }, { 20, 25, 20, 25 }, { 16, 20, 16, 20 }, { 20, 25, 20, 25} },
-						    { { 18, 23, 18, 23 }, { 23, 29, 23, 29 }, { 18, 23, 18, 23 }, { 23, 29, 23, 29} } };
-
-const int qpc_table[52] = { 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,
-							29, 30, 31, 32, 32, 33, 34, 34,35,35,36,36,37,37,37,38,38,38,39,39,39,39 };
-
-// Process a single transform block
+// Process and code a single transform block
 // Input: qp, offset(0.8), deadzone(16.8) ref[16], orig[16], bidx, cidx {0-luma, 1-acluma, 2-cb, 3-cr, 4-dccb, 5-dccr, 6-dcy}
 // Output: recon[16], bits, *bitcount, *sad, *ssd
 // Steps: pred, T, Q, Q', T', recon, stats, cavlc encode
@@ -44,6 +19,20 @@ int gg_process_block(int qpy, int offset, int deadzone, int *ref, int *orig, int
 	int qc, qcdz;
 	int quant;
 	int qshift;
+
+	// Save local copies of data for test decode at end
+#define DECODE_SELF_TEST
+#ifdef DECODE_SELF_TEST
+	int test_dc_hold[16];
+	char test_abvnc[4], test_lefnc[4];
+	for (int ii = 0; ii < 16; ii++ ) {
+		test_dc_hold[ii] = dc_hold[ii];
+	}
+	for (int ii = 0; ii < 4; ii++) {
+		test_abvnc[ii] = abvnc[ii];
+		test_lefnc[ii] = lefnc[ii];
+	}
+#endif
 
 	// Flags
 	int dc_flag = (cidx == 4 || cidx == 5 || cidx == 6) ? 1 : 0;
@@ -485,6 +474,49 @@ int gg_process_block(int qpy, int offset, int deadzone, int *ref, int *orig, int
 	//	}
 	//}
 	//printf(" } \n");
+
+
+	//////////////////////////////////////////
+	// Test decoder
+	//////////////////////////////////////////
+
+#ifdef DECODE_SELF_TEST
+	printf(".");
+	int test_bitcount;
+	int test_recon[16];
+	test_bitcount = gg_iprocess_block(qpy, ref, test_dc_hold, cidx, bidx, test_lefnc, test_abvnc, test_recon, bits, 0 ); // skip not tested
+	int test_error = 0;
+	for (int ii = 0; ii < 16; ii++) {
+		test_error += (test_recon[ii] != recon[ii]) ? 1 : 0;
+		test_error += (test_dc_hold[ii] != dc_hold[ii]) ? 1 : 0;
+	}
+	for (int ii = 0; ii < 4; ii++) {
+		test_error += (test_lefnc[ii] != lefnc[ii]) ? 1 : 0;
+		test_error += (test_abvnc[ii] != abvnc[ii]) ? 1 : 0;
+	}
+	test_error += (test_bitcount != *bitcount ) ? 1 : 0;
+
+	if (test_error) {
+		int ii;
+		printf("Cidx %d Bidx %d test ERROR count %d\n", cidx, bidx, test_error);
+			printf("        Encode           Decode test        \n");
+			printf(" bits | %02x               %02x               \n", *bitcount, test_bitcount);
+		for (ii = 0; ii < 16; ii+=4) {
+			printf("recon | %02x %02x %02x %02x |  | %02x %02x %02x %02x\n", (unsigned char)recon[ii + 0], (unsigned char)recon[ii + 2], (unsigned char)recon[ii + 2], (unsigned char)recon[ii + 3], 
+				(unsigned char)test_recon[ii + 0], (unsigned char)test_recon[ii + 1], (unsigned char)test_recon[ii + 2], (unsigned char)test_recon[ii + 3]);
+		}
+		ii = 0;
+		printf("lefnc | %02x %02x %02x %02x |  | %02x %02x %02x %02x\n", (unsigned char)lefnc[ii + 0], (unsigned char)lefnc[ii + 1], (unsigned char)lefnc[ii + 2], (unsigned char)lefnc[ii + 3], 
+			(unsigned char)test_lefnc[ii + 0], (unsigned char)test_lefnc[ii + 1], (unsigned char)test_lefnc[ii + 2], (unsigned char)test_lefnc[ii + 3]);
+		printf("abvnc | %02x %02x %02x %02x |  | %02x %02x %02x %02x\n", (unsigned char)abvnc[ii + 0], (unsigned char)abvnc[ii + 1], (unsigned char)abvnc[ii + 2], (unsigned char)abvnc[ii + 3], 
+			(unsigned char)test_abvnc[ii + 0], (unsigned char)test_abvnc[ii + 1], (unsigned char)test_abvnc[ii + 2], (unsigned char)test_abvnc[ii + 3]);
+		for (ii = 0; ii < 16; ii += 4) {
+			printf("dc_hold | %02x %02x %02x %02x |  | %02x %02x %02x %02x\n", (unsigned char)dc_hold[ii + 0], (unsigned char)dc_hold[ii + 2], (unsigned char)dc_hold[ii + 2], (unsigned char)dc_hold[ii + 3], 
+				(unsigned char)test_dc_hold[ii + 0], (unsigned char)test_dc_hold[ii + 1], (unsigned char)test_dc_hold[ii + 2], (unsigned char)test_dc_hold[ii + 3]);
+		}
+		printf("-\n");
+	}
+#endif
 
 	//////////////////////////////////////////
 	// Done, return num_coeff for block

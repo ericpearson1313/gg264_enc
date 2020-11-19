@@ -580,7 +580,6 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
             int cbp = 0;
             int macroblock_layer_length = 0;
             int num_coeff = 0;
-
             if (intra_col_width)
                 refidx = (xx >= ggo_intra_col && xx < ggo_intra_col + intra_col_width) ? 1 : 0;
 
