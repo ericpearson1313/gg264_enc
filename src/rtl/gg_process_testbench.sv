@@ -82,6 +82,8 @@ module gg_process_testbench(
      logic [0:3][7:0] right_nc_y;    
      logic [0:1][7:0] right_nc_cb;    
      logic [0:1][7:0] right_nc_cr;
+  
+  
      
      
    gg_process  
@@ -138,6 +140,75 @@ module gg_process_testbench(
         above_nc_cr <= below_nc_cr;
     end
     
+    // Decode testbench
+    
+     logic [3:0][7:0] iabove_nc_y;
+     logic [1:0][7:0] iabove_nc_cb;
+     logic [1:0][7:0] iabove_nc_cr;
+     logic [3:0][7:0] ibelow_nc_y;
+     logic [1:0][7:0] ibelow_nc_cb;
+     logic [1:0][7:0] ibelow_nc_cr;
+     logic [0:3][7:0] ileft_nc_y;    
+     logic [0:1][7:0] ileft_nc_cb;    
+     logic [0:1][7:0] ileft_nc_cr;
+     logic [0:3][7:0] iright_nc_y;    
+     logic [0:1][7:0] iright_nc_cb;    
+     logic [0:1][7:0] iright_nc_cr;
+     logic [15:0][15:0] idc_hold;
+     logic [15:0][15:0] idc_hold_dout;
+     logic [0:15][7:0]  irecon;
+     logic [8:0] ibitcount;   
+     logic [6:0] ioverflow;
+     logic [4:0] inum_coeff;
+     
+   gg_iprocess  
+   #(
+        .BIT_LEN  ( 17 ), 
+        .WORD_LEN ( 16 )
+    ) gg_iprocess_dut_
+    (
+        .clk ( clk ),  
+        // Inputs
+        .pred            ( pred           ), 
+        .qpy             ( qpy            ), 
+        .cidx            ( cidx           ), // cidx={0-luma 1-acluma 2-cb 3-cr 4-dccb 5-dccr 6-dcy}
+        .bidx            ( bidx           ), // block IDX in h264 order
+        .abv_out_of_pic  ( abv_out_of_pic ), 
+        .left_out_of_pic ( left_out_of_pic ), 
+        .above_nc_y      ( iabove_nc_y     ), 
+        .above_nc_cb     ( iabove_nc_cb    ), 
+        .above_nc_cr     ( iabove_nc_cr    ), 
+        .left_nc_y       ( ileft_nc_y      ), 
+        .left_nc_cb      ( ileft_nc_cb     ), 
+        .left_nc_cr      ( ileft_nc_cr     ), 
+        .dc_hold         ( idc_hold        ),
+        .bits            ( bits            ), // input bits (max 497 bits)
+        .start_ofs       ( 512 - bitcount  ),
+        // Outputs
+        .dc_hold_dout    ( idc_hold_dout   ),
+        .recon           ( irecon          ), 
+        .bitcount        ( ibitcount       ), // bitcount to code block
+        .num_coeff       ( inum_coeff      ), // Count of non-zero block coeffs
+        .below_nc_y      ( ibelow_nc_y     ), // Num Coeff holding registers
+        .below_nc_cb     ( ibelow_nc_cb    ), //     to be saved for the below Macroblock Row inputs
+        .below_nc_cr     ( ibelow_nc_cr    ), //     these are updated with num_coeff 
+        .right_nc_y      ( iright_nc_y     ), 
+        .right_nc_cb     ( iright_nc_cb    ), 
+        .right_nc_cr     ( iright_nc_cr    ), 
+        .overflow        ( ioverflow       )  // Overflow: 0-qdz, 1-iquant, 2..5-itran, 6-vlcp15
+    );
+
+    // Add testbench Flip Flops for left_nc, and dc_hold.
+    
+    always_ff @(posedge clk) begin
+        idc_hold     <= idc_hold_dout;
+        ileft_nc_y   <= iright_nc_y;
+        ileft_nc_cb  <= iright_nc_cb;
+        ileft_nc_cr  <= iright_nc_cr;
+        iabove_nc_y  <= ibelow_nc_y;
+        iabove_nc_cb <= ibelow_nc_cb;
+        iabove_nc_cr <= ibelow_nc_cr;
+    end
     
  ///////////////////////////////////////////
  //
@@ -308,6 +379,9 @@ module gg_process_testbench(
            if( recon != recon_mb_vec[ii] ) begin
                 $write("ERROR: Recon[%d].Y mismatch\n", ii );
            end
+           if( irecon != recon_mb_vec[ii] ) begin
+                $write("ERROR: iRecon[%d].Y mismatch\n", ii );
+           end
            if( { bitcount, bits, mask } != vlc_mb_vec[ii] ) begin
                 $write("ERROR: Bitstream[%0d].Y mismatch\n", ii );
                 $write("  ref: %0d %0h %0h\n", bitcount, bits, mask );
@@ -317,7 +391,11 @@ module gg_process_testbench(
            for( int bb = 0; bb < 16; bb++ ) 
                $write("%0h ", recon[bb] );
            $write(" }\n");
-           $write( "ref Y  recon = { ");
+           $write(  "dut Y irecon = { ");
+           for( int bb = 0; bb < 16; bb++ ) 
+               $write("%0h ", irecon[bb] );
+           $write(" }\n");
+           $write(  "ref Y  recon = { ");
            for( int bb = 0; bb < 16; bb++ ) 
                $write("%0h ", recon_mb_vec[ii][bb] );
            $write(" }\n");
@@ -349,6 +427,9 @@ module gg_process_testbench(
            if( recon != recon_mb_vec[16+ii] ) begin
                 $write("ERROR: recon[%d].Cb mismatch\n", ii );
            end
+           if( irecon != recon_mb_vec[16+ii] ) begin
+                $write("ERROR: irecon[%d].Cb mismatch\n", ii );
+           end
            if( { bitcount, bits, mask } != vlc_mb_vec[18+ii] ) begin
                 $write("ERROR: Bitstream[%d].Cb mismatch\n", ii );
            end           
@@ -357,7 +438,11 @@ module gg_process_testbench(
            for( int bb = 0; bb < 16; bb++ ) 
                $write("%0h ", recon[bb] );
            $write(" }\n");
-           $write( "ref Cb recon = { ");
+           $write(  "dut Cbirecon = { ");
+           for( int bb = 0; bb < 16; bb++ ) 
+               $write("%0h ", irecon[bb] );
+           $write(" }\n");
+           $write(  "ref Cb recon = { ");
            for( int bb = 0; bb < 16; bb++ ) 
                $write("%0h ", recon_mb_vec[16+ii][bb] );
            $write(" }\n");
@@ -371,12 +456,20 @@ module gg_process_testbench(
            if( recon != recon_mb_vec[20+ii] ) begin
                 $write("ERROR: recon[%d].Cr mismatch\n", ii );
            end
+           if( irecon != recon_mb_vec[20+ii] ) begin
+                $write("ERROR: irecon[%d].Cr mismatch\n", ii );
+           end
+
            if( { bitcount, bits, mask } != vlc_mb_vec[22+ii] ) begin
                 $write("ERROR: Bitstream[%d].Cr mismatch\n", ii );
            end           
            $write("\ndut Cr recon = { ");
            for( int bb = 0; bb < 16; bb++ ) 
                $write("%0h ", recon[bb] );
+           $write(" }\n");
+           $write(  "dut Crirecon = { ");
+           for( int bb = 0; bb < 16; bb++ ) 
+               $write("%0h ", irecon[bb] );
            $write(" }\n");
            $write( "ref Cr recon = { ");
            for( int bb = 0; bb < 16; bb++ ) 

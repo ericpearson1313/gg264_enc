@@ -33,6 +33,7 @@ module gg_iprocess
     input  logic [3:0] bidx, // block IDX in h264 order
     output logic [8:0] bitcount, // bitcount to code block
     input  logic [511:0] bits, // input bits (max 501
+    input  logic [8:0] start_ofs, // start position of the bits
     output logic [4:0] num_coeff, // Count of non-zero block coeffs
     input  logic abv_out_of_pic,
     input  logic left_out_of_pic,
@@ -118,7 +119,7 @@ module gg_iprocess
 	
 	// Calculate the offsets (TODO: adder trees)
 	
-	assign coeff_token_ofs    = 9'b0;
+	assign coeff_token_ofs    = start_ofs;
     assign coeff_ofs[ 0]      = coeff_token_ofs    + coeff_token_len    ;	
     assign coeff_ofs[ 1]      = coeff_ofs[ 0]      + coeff_len[ 0]      ;
     assign coeff_ofs[ 2]      = coeff_ofs[ 1]      + coeff_len[ 1]      ;
@@ -193,7 +194,7 @@ module gg_iprocess
         trailing_ones[1:0] = 2'd0;
         num_coeff[4:0] = 5'd0;
         coeff_token_len[8:0] = 9'd0;
-        unique casez( { coeff_idx[2:0], coeff_token_bitword[31:16] } )
+        unique0 casez( { coeff_idx[2:0], coeff_token_bitword[31:16] } )
             // idx = 0
             { 3'd0, 16'b1??????????????? } : { trailing_ones[1:0], num_coeff[4:0], coeff_token_len[4:0] } = { 3'd0, 5'd0 , 5'd1 };
             { 3'd0, 16'b000101?????????? } : { trailing_ones[1:0], num_coeff[4:0], coeff_token_len[4:0] } = { 3'd0, 5'd1 , 5'd6 };
@@ -464,7 +465,30 @@ module gg_iprocess
         endcase 
     end
 
+    // Update nc context right/below. In simple case these are an external register
     
+    always_comb begin : nc_update_vld
+        // left -> right
+        right_nc_y[0] =  ( !dc_flag && y_flag && !bidx[3] && !bidx[1] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, left_nc_y[0][4:0] };
+        right_nc_y[1] =  ( !dc_flag && y_flag && !bidx[3] &&  bidx[1] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, left_nc_y[1][4:0] };
+        right_nc_y[2] =  ( !dc_flag && y_flag &&  bidx[3] && !bidx[1] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, left_nc_y[2][4:0] };
+        right_nc_y[3] =  ( !dc_flag && y_flag &&  bidx[3] &&  bidx[1] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, left_nc_y[3][4:0] };
+        right_nc_cb[0] = ( !dc_flag && cb_flag && !bidx[1] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, left_nc_cb[0][4:0] };
+        right_nc_cb[1] = ( !dc_flag && cb_flag &&  bidx[1] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, left_nc_cb[1][4:0] };
+        right_nc_cr[0] = ( !dc_flag && cr_flag && !bidx[1] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, left_nc_cr[0][4:0] };                     
+        right_nc_cr[1] = ( !dc_flag && cr_flag &&  bidx[1] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, left_nc_cr[1][4:0] }; 
+        // above -> below      
+        below_nc_y[0] =  ( !dc_flag && y_flag && !bidx[2] && !bidx[0] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, above_nc_y[0][4:0] };
+        below_nc_y[1] =  ( !dc_flag && y_flag && !bidx[2] &&  bidx[0] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, above_nc_y[1][4:0] };
+        below_nc_y[2] =  ( !dc_flag && y_flag &&  bidx[2] && !bidx[0] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, above_nc_y[2][4:0] };
+        below_nc_y[3] =  ( !dc_flag && y_flag &&  bidx[2] &&  bidx[0] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, above_nc_y[3][4:0] };
+        below_nc_cb[0] = ( !dc_flag && cb_flag && !bidx[0] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, above_nc_cb[0][4:0] };
+        below_nc_cb[1] = ( !dc_flag && cb_flag &&  bidx[0] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, above_nc_cb[1][4:0] };
+        below_nc_cr[0] = ( !dc_flag && cr_flag && !bidx[0] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, above_nc_cr[0][4:0] };                     
+        below_nc_cr[1] = ( !dc_flag && cr_flag &&  bidx[0] ) ? { 3'b000, num_coeff[4:0] } : { 3'b000, above_nc_cr[1][4:0] };        
+    end
+
+
 
     //////////////////////////////
     // level_prefix, level_suffix, trailing_ones
@@ -486,15 +510,17 @@ module gg_iprocess
                 suffix_length[ii+1] = suffix_length[ii];
                 level_code[ii][12:0]= { 12'h000, coeff_bitword[ii][31] };
                 level[ii][12:0] = ( coeff_bitword[ii][31] ) ? 13'h1FFF : 13'h0001;
-                coeff_len[ii][4:0]  = 5'd1;
-            end else if ( ii >= max_coeff ) begin // zero fill
+                coeff_len[ii][8:0]  = 5'd1;
+            end else if ( ii >= max_coeff || ii >= num_coeff ) begin // zero fill
                 suffix_length[ii+1] = suffix_length[ii];
                 level_code[ii][12:0]     = 13'h0000;
                 level[ii][12:0] = 13'h0000;
-                coeff_len[ii][4:0]  = 5'd0;
+                coeff_len[ii][8:0]  = 5'd0;
            end else begin // normal coeff
                 // get level prefix
-                unique casez ( coeff_bitword[ii][31:16] )
+                level_prefix[ii][3:0] = 0;
+                level_suffix_bits[ii][5:0] = 0;
+                unique0 casez ( coeff_bitword[ii][31:16] )
                     { 16'b1??????????????? } : begin level_prefix[ii][3:0] = 4'd0 ; level_suffix_bits[ii][5:0] = coeff_bitword[ii][30:25]; end
                     { 16'b01?????????????? } : begin level_prefix[ii][3:0] = 4'd1 ; level_suffix_bits[ii][5:0] = coeff_bitword[ii][29:24]; end
                     { 16'b001????????????? } : begin level_prefix[ii][3:0] = 4'd2 ; level_suffix_bits[ii][5:0] = coeff_bitword[ii][28:23]; end
@@ -514,16 +540,20 @@ module gg_iprocess
                 endcase
                 // level_code
                 if( level_prefix[ii] == 4'd14 && suffix_length[0][2:0] == 3'd0 ) begin
+                    coeff_len[ii][8:0] = 9'd19;
                     level_code[ii][12:0] = coeff_bitword[ii][16:13] + 14;
                 end else if ( level_prefix[ii] == 4'd15 ) begin
-                    level_code[ii][12:0] = coeff_bitword[ii][15:4] + ( suffix_length[ii] == 0 ) ? 30  :
-                                                                     ( suffix_length[ii] == 1 ) ? 30  :
-                                                                     ( suffix_length[ii] == 2 ) ? 60  :
-                                                                     ( suffix_length[ii] == 3 ) ? 120 :
-                                                                     ( suffix_length[ii] == 4 ) ? 240 :
-                                                                     ( suffix_length[ii] == 5 ) ? 480 : 960;
+                    coeff_len[ii][8:0] = 9'd28;                                                                    
+                    level_code[ii][12:0] = { 1'b0, coeff_bitword[ii][15:4] } + (( suffix_length[ii] == 0 ) ? 13'd30  :
+                                                                                ( suffix_length[ii] == 1 ) ? 13'd30  :
+                                                                                ( suffix_length[ii] == 2 ) ? 13'd60  :
+                                                                                ( suffix_length[ii] == 3 ) ? 13'd120 :
+                                                                                ( suffix_length[ii] == 4 ) ? 13'd240 :
+                                                                                ( suffix_length[ii] == 5 ) ? 13'd480 : 13'd960);
                 end else begin // Normal coeff case
-                    unique casez( suffix_length[ii] ) 
+                    level_code[ii] = 0;
+                    coeff_len[ii][8:0] = level_prefix[ii] + suffix_length[ii] + 1;                                                                     
+                    unique0 casez( suffix_length[ii] ) 
                         0 : level_code[ii] = { 9'b0, level_prefix[ii][3:0]                             };
                         1 : level_code[ii] = { 8'b0, level_prefix[ii][3:0], level_suffix_bits[ii][5]   };
                         2 : level_code[ii] = { 7'b0, level_prefix[ii][3:0], level_suffix_bits[ii][5:4] };
@@ -541,7 +571,11 @@ module gg_iprocess
                 end
                 // calc next suffix length
                 if( suffix_length[ii][2:0] == 3'd0 ) begin
-                    suffix_length[ii+1] = ( coeff_bitword[ii][31:26] == 6'b000000  ) ? 3'd2 : 3'd1;
+                    if( ii == trailing_ones && ii < 3 ) begin // special case, level_code+=2
+                        suffix_length[ii+1] = ( coeff_bitword[ii][31:28] == 4'b0000  ) ? 3'd2 : 3'd1;
+                    end else begin
+                        suffix_length[ii+1] = ( coeff_bitword[ii][31:26] == 6'b000000  ) ? 3'd2 : 3'd1;
+                    end
                 end else if ( suffix_length[ii][2:0] < 3'd6 ) begin
                     suffix_length[ii+1][2:0] = suffix_length[ii][2:0] + (( coeff_bitword[ii][31:29] == 3'b000 ) ? 3'd1 : 3'd0 );
                 end else begin
@@ -559,9 +593,9 @@ module gg_iprocess
      
     logic [4:0] total_zeros;
     always_comb begin : _total_zeros_vld
-        total_zeros[4:0] = 5'd0;
-        total_zeros_len[8:0] = 9'd0;   
-        unique casez( { (ch_flag & dc_flag), num_coeff[4:0], total_zeros_bitword[31:23] } )
+        total_zeros[4:0] = 0;
+        total_zeros_len[8:0] = 0;   
+        unique0 casez( { (ch_flag & dc_flag), num_coeff[4:0], total_zeros_bitword[31:23] } )
             // Luma special cases, num_coeff == 0 and num_coeff == max_coeff
             { 1'b0, 5'd0, 9'b????????? } : { total_zeros[4:0], total_zeros_len[3:0] } = { 5'd16, 4'd0 };
             { 1'b0, 5'd16,9'b????????? } : { total_zeros[4:0], total_zeros_len[3:0] } = { 5'd0, 4'd0 };
@@ -738,7 +772,9 @@ module gg_iprocess
                 zeros_left[ii+1]   = 0;
             end else if ( zeros_left[ii] ) begin // run_before parsing
                 run_before_len[ii][8:4]= 0;
-                unique casez( { (( zeros_left[ii][4:0] > 5'd6 ) ? 3'd7 : zeros_left[ii][2:0] ), run_before_bitword[ii][31:21] } )
+                run_before_len [ii][3:0] = 0;
+                run_before[ii][3:0] = 0;
+                unique0 casez( { (( zeros_left[ii][4:0] > 5'd6 ) ? 3'd7 : zeros_left[ii][2:0] ), run_before_bitword[ii][31:21] } )
                     { 3'd1, 11'b1?????????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd0, 4'd1 };
                     { 3'd1, 11'b0?????????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd1, 4'd1 };
                     { 3'd2, 11'b1?????????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd0, 4'd1 };
@@ -766,13 +802,13 @@ module gg_iprocess
                     { 3'd6, 11'b010???????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd4, 4'd3 };
                     { 3'd6, 11'b101???????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd5, 4'd3 };
                     { 3'd6, 11'b100???????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd6, 4'd3 };
-                    { 3'd7, 11'b11????????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd0, 4'd3 };
-                    { 3'd7, 11'b000???????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd1, 4'd3 };
-                    { 3'd7, 11'b001???????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd2, 4'd3 };
-                    { 3'd7, 11'b011???????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd3, 4'd3 };
-                    { 3'd7, 11'b010???????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd4, 4'd3 };
-                    { 3'd7, 11'b101???????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd5, 4'd3 };
-                    { 3'd7, 11'b100???????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd6, 4'd3 };
+                    { 3'd7, 11'b111???????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd0, 4'd3 };
+                    { 3'd7, 11'b110???????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd1, 4'd3 };
+                    { 3'd7, 11'b101???????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd2, 4'd3 };
+                    { 3'd7, 11'b100???????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd3, 4'd3 };
+                    { 3'd7, 11'b011???????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd4, 4'd3 };
+                    { 3'd7, 11'b010???????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd5, 4'd3 };
+                    { 3'd7, 11'b001???????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd6, 4'd3 };
                     { 3'd7, 11'b0001??????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd7, 4'd4 };
                     { 3'd7, 11'b00001?????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd8, 4'd5 };
                     { 3'd7, 11'b000001????? } : { run_before[ii][3:0], run_before_len[ii][3:0] } = { 4'd9, 4'd6 };
@@ -798,8 +834,9 @@ module gg_iprocess
     // using num_coeff, total_zeros and run_before[14]
     // and 2D ordering to mux level[16] into coeff[16]
 
-	logic [15:0][4:0] izigzag4x4 = { 5'd0, 5'd1 , 5'd5, 5'd6 , 5'd2 , 5'd4 , 5'd7 , 5'd12, 5'd3, 5'd8 , 5'd11, 5'd13, 5'd9 , 5'd10, 5'd14, 5'd15 };
-	logic [15:0][4:0] izigzag2x2 = { 5'd0, 5'd16, 5'd1, 5'd16, 5'd16, 5'd16, 5'd16, 5'd16, 5'd2, 5'd16, 5'd3 , 5'd16, 5'd16, 5'd16, 5'd16, 5'd16 };
+	logic [0:15][4:0] izigzag4x4ac = { 5'd16, 5'd0, 5'd4, 5'd5 , 5'd1 , 5'd3 , 5'd6 , 5'd11, 5'd2, 5'd7 , 5'd10, 5'd12, 5'd8 , 5'd9 , 5'd13, 5'd14 };
+	logic [0:15][4:0] izigzag4x4   = { 5'd0, 5'd1 , 5'd5, 5'd6 , 5'd2 , 5'd4 , 5'd7 , 5'd12, 5'd3, 5'd8 , 5'd11, 5'd13, 5'd9 , 5'd10, 5'd14, 5'd15 };
+	logic [0:15][4:0] izigzag2x2   = { 5'd0, 5'd16, 5'd1, 5'd16, 5'd16, 5'd16, 5'd16, 5'd16, 5'd2, 5'd16, 5'd3 , 5'd16, 5'd16, 5'd16, 5'd16, 5'd16 };
 
     logic signed [12:0] coeff[16]; // signed for later iq multiply
     logic [4:0] scan_index[16];
@@ -811,11 +848,11 @@ module gg_iprocess
 
     always_comb begin : _zigzag_vld
         // create scan index[] from run_before[].
-        cur_run[0][4:0]   = 0;
+        cur_run[0][4:0]   = num_coeff_minus1;
         cur_zeros[0][3:0] = run_before[cur_run[0][3:0]][3:0];
         cur_coeff[0][3:0] = num_coeff_minus1;        
         for( int ii = 0; ii < 16; ii++ ) begin // create scan_idx
-            if( ii >= ( ( ch_flag & dc_flag ) ? 4 : 16 ) ) begin
+            if( ii >= ( ( ch_flag & dc_flag ) ? 4 : ( ac_flag ) ? 15 : 16 ) ) begin
                 scan_index[ii] = 5'h10;
                 cur_coeff[ii+1] = cur_coeff[ii];
                 cur_run[ii+1]   = cur_run[ii];
@@ -828,7 +865,7 @@ module gg_iprocess
             end else if( cur_zeros[ii] == 0 ) begin
                 scan_index[ii][4:0] = { 1'b0, cur_coeff[ii][3:0] };
                 cur_coeff[ii+1] = cur_coeff[ii] - 1;
-                cur_run[ii+1]   = cur_run[ii] + 1;
+                cur_run[ii+1]   = cur_run[ii] - 1;
                 cur_zeros[ii+1] = run_before[ cur_run[ii+1] ];
             end else begin
                 scan_index[ii]  = 5'h10;
@@ -840,7 +877,7 @@ module gg_iprocess
 
         // load coeff from level with scan_index[zigzag[]]       
         for( int ii = 0 ; ii < 16; ii++ ) begin  
-            idx1[ii][4:0]   = ( ch_flag & dc_flag ) ? izigzag2x2[ii][4:0] : izigzag4x4[ii][4:0];
+            idx1[ii][4:0]   = ( ch_flag & dc_flag ) ? izigzag2x2[ii][4:0] : ( ac_flag ) ? izigzag4x4ac[ii][4:0] : izigzag4x4[ii][4:0];
             idx2[ii][4:0]   = ( idx1[ii][4] ) ? 5'h10 : scan_index[idx1[ii][3:0]];
             coeff[ii][12:0] = ( idx2[ii][4] ) ? 13'd0 : level[idx2[ii][3:0]];
         end //ii 
@@ -935,9 +972,9 @@ module gg_iprocess
                     f[ii] = 29'd0;
                 end
                 f[ 0][28:0] = { 16'b0, coeff[0][12:0] };
-                f[ 2][28:0] = { 16'b0, coeff[1][12:0] };
-                f[ 8][28:0] = { 16'b0, coeff[4][12:0] };
-                f[10][28:0] = { 16'b0, coeff[5][12:0] };
+                f[ 2][28:0] = { 16'b0, coeff[2][12:0] };
+                f[ 8][28:0] = { 16'b0, coeff[8][12:0] };
+                f[10][28:0] = { 16'b0, coeff[10][12:0] };
             end else begin // just copy thru luma DC
                 for( int ii = 0; ii < 16; ii++ ) begin
                     f[ii][28:0] = { 16'b0, coeff[ii][12:0] };
@@ -1093,15 +1130,15 @@ module vld_shift_512 #(
         shift[8:0] = sel[8:0];
         for( int ii = 0; ii < 512; ii++ ) begin
             barrel[0][ii] = ( ii < MIN_SHIFT ) ? 1'b0 : ( ii > MAX_SHIFT + OWIDTH ) ? 1'b0 : in[ii]; // Zero unused inputs
-            barrel[1][ii] = ( shift[8] ) ? (( ii > 256 ) ? barrel[0][ii-256] : 1'b0 ) : barrel[0][ii];     
-            barrel[2][ii] = ( shift[7] ) ? (( ii > 128 ) ? barrel[1][ii-128] : 1'b0 ) : barrel[1][ii];
-            barrel[3][ii] = ( shift[6] ) ? (( ii >  64 ) ? barrel[2][ii- 64] : 1'b0 ) : barrel[2][ii];
-            barrel[4][ii] = ( shift[5] ) ? (( ii >  32 ) ? barrel[3][ii- 32] : 1'b0 ) : barrel[3][ii];
-            barrel[5][ii] = ( shift[4] ) ? (( ii >  16 ) ? barrel[4][ii- 16] : 1'b0 ) : barrel[4][ii];
-            barrel[6][ii] = ( shift[3] ) ? (( ii >   8 ) ? barrel[5][ii-  8] : 1'b0 ) : barrel[5][ii];
-            barrel[7][ii] = ( shift[2] ) ? (( ii >   4 ) ? barrel[6][ii-  4] : 1'b0 ) : barrel[6][ii];
-            barrel[8][ii] = ( shift[1] ) ? (( ii >   2 ) ? barrel[7][ii-  2] : 1'b0 ) : barrel[7][ii];
-            barrel[9][ii] = ( shift[0] ) ? (( ii >   1 ) ? barrel[8][ii-  1] : 1'b0 ) : barrel[8][ii];
+            barrel[1][ii] = ( shift[8] ) ? (( ii >= 256 ) ? barrel[0][ii-256] : 1'b0 ) : barrel[0][ii];     
+            barrel[2][ii] = ( shift[7] ) ? (( ii >= 128 ) ? barrel[1][ii-128] : 1'b0 ) : barrel[1][ii];
+            barrel[3][ii] = ( shift[6] ) ? (( ii >=  64 ) ? barrel[2][ii- 64] : 1'b0 ) : barrel[2][ii];
+            barrel[4][ii] = ( shift[5] ) ? (( ii >=  32 ) ? barrel[3][ii- 32] : 1'b0 ) : barrel[3][ii];
+            barrel[5][ii] = ( shift[4] ) ? (( ii >=  16 ) ? barrel[4][ii- 16] : 1'b0 ) : barrel[4][ii];
+            barrel[6][ii] = ( shift[3] ) ? (( ii >=   8 ) ? barrel[5][ii-  8] : 1'b0 ) : barrel[5][ii];
+            barrel[7][ii] = ( shift[2] ) ? (( ii >=   4 ) ? barrel[6][ii-  4] : 1'b0 ) : barrel[6][ii];
+            barrel[8][ii] = ( shift[1] ) ? (( ii >=   2 ) ? barrel[7][ii-  2] : 1'b0 ) : barrel[7][ii];
+            barrel[9][ii] = ( shift[0] ) ? (( ii >=   1 ) ? barrel[8][ii-  1] : 1'b0 ) : barrel[8][ii];
         end
         out[31:32-OWIDTH] = barrel[9][511:512-OWIDTH]; // only select used output, synth remove the unused muxes
         out[31-OWIDTH:0] = 0;
