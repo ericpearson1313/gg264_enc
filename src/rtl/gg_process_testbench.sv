@@ -38,7 +38,7 @@ module gg_process_testbench(
     ///////////////////////
     
     initial begin
-        #(900ns);
+        #(2000ns);
         $write("GOBBLE: Sim terminated; hard coded time limit reached.\n");
         $finish;
     end
@@ -82,8 +82,9 @@ module gg_process_testbench(
      logic [0:3][7:0] right_nc_y;    
      logic [0:1][7:0] right_nc_cb;    
      logic [0:1][7:0] right_nc_cr;
-  
-  
+     
+     
+
      
      
    gg_process  
@@ -304,6 +305,17 @@ module gg_process_testbench(
          { 9'd1, 512'b1 , 512'b1 },
          { 9'd1, 512'b1 , 512'b1 }
         };  
+    
+         // testbench decl
+     int fd;
+     string line;
+     logic [0:15][7:0]   tb_recon;
+     logic [8:0] tb_bitcount;
+     logic [0:15][31:0] tb_bits;
+     logic [0:15][31:0] tb_mask;
+     
+
+    
        
     initial begin
        orig = 192'h0;
@@ -477,7 +489,101 @@ module gg_process_testbench(
            $write(" }\n");
            @(posedge clk);
        end
-       for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
+       // File write path test
+       //fd = $fopen( "C:/Users/ecp/Documents/gg264_enc/src/test/test_write.txt", "w");
+       //$fdisplay( fd, "Hello\n");
+       //$fclose( fd );
+       // File read and test
+       fd = $fopen( "C:/Users/ecp/Documents/gg264_enc/src/test/test1.txt", "r");
+       $write("*****************************************************************\n");
+       $write("** \n");
+       $write("** F I L E       V E C T O R      T E S T\n");
+       $write("** \n");
+       $write("*****************************************************************\n");
+       $write("\n");
+      
+       while( !$feof( fd ) ) begin
+            // read stimulus vector from file
+            $fgets( line, fd ); // line 1 - params
+            $sscanf( line, "%h %h %h %h %h %h %h %h", tb_bitcount, cidx, bidx, qpy, abv_out_of_pic, left_out_of_pic, offset, deadzone );
+            $fgets( line, fd ); // line 2 - orig[16]
+            $sscanf( line, "%h %h %h %h %h %h %h %h %h %h %h %h %h %h %h %h", orig[0] , orig[1] , orig[2] , orig[3],
+                                                                              orig[4] , orig[5] , orig[6] , orig[7],
+                                                                              orig[8] , orig[9] , orig[10], orig[11],
+                                                                              orig[12], orig[13], orig[14], orig[15] );
+            $fgets( line, fd ); // line 3 - pred[16]
+            $sscanf( line, "%h %h %h %h %h %h %h %h %h %h %h %h %h %h %h %h", pred[0] , pred[1] , pred[2] , pred[3],
+                                                                              pred[4] , pred[5] , pred[6] , pred[7],
+                                                                              pred[8] , pred[9] , pred[10], pred[11],
+                                                                              pred[12], pred[13], pred[14], pred[15] );
+            $fgets( line, fd ); // line 4 - recon[16]
+            $sscanf( line, "%h %h %h %h %h %h %h %h %h %h %h %h %h %h %h %h", tb_recon[0] , tb_recon[1] , tb_recon[2] , tb_recon[3],
+                                                                              tb_recon[4] , tb_recon[5] , tb_recon[6] , tb_recon[7],
+                                                                              tb_recon[8] , tb_recon[9] , tb_recon[10], tb_recon[11],
+                                                                              tb_recon[12], tb_recon[13], tb_recon[14], tb_recon[15] );
+            $fgets( line, fd ); // line 5 - bits[512]
+            $sscanf( line, "%h %h %h %h %h %h %h %h %h %h %h %h %h %h %h %h", tb_bits[0] , tb_bits[1] , tb_bits[2] , tb_bits[3],
+                                                                              tb_bits[4] , tb_bits[5] , tb_bits[6] , tb_bits[7],
+                                                                              tb_bits[8] , tb_bits[9] , tb_bits[10], tb_bits[11],
+                                                                              tb_bits[12], tb_bits[13], tb_bits[14], tb_bits[15] );
+            
+            $fgets( line, fd ); // line 5 - mask[512]
+            $sscanf( line, "%h %h %h %h %h %h %h %h %h %h %h %h %h %h %h %h", tb_mask[0] , tb_mask[1] , tb_mask[2] , tb_mask[3],
+                                                                              tb_mask[4] , tb_mask[5] , tb_mask[6] , tb_mask[7],
+                                                                              tb_mask[8] , tb_mask[9] , tb_mask[10], tb_mask[11],
+                                                                              tb_mask[12], tb_mask[13], tb_mask[14], tb_mask[15] );
+
+            
+            
+            // Run test
+            @(negedge clk);
+            
+            // Check results
+            $write("\n");
+            $write("%h %h %h %h %h %h %h %h\n", tb_bitcount, cidx, bidx, qpy, abv_out_of_pic, left_out_of_pic, offset, deadzone );
+           if( cidx != 4 && cidx !=5 ) begin
+               if( recon != tb_recon ) begin
+                    $write("ERROR: Recon mismatch\n" );
+               end
+               if( irecon != tb_recon ) begin
+                    $write("ERROR: iRecon mismatch\n" );
+               end
+           end
+           if( { bitcount, bits, mask } != { tb_bitcount, tb_bits, tb_mask } ) begin
+                $write("ERROR: Bitstream mismatch\n" );
+           end  
+           if( cidx != 4 && cidx !=5 ) begin         
+               $write(  "dut   recon = { ");
+               for( int bb = 0; bb < 16; bb++ ) 
+                   $write("%0h ", recon[bb] );
+               $write(" }\n");
+               $write(  "dut  irecon = { ");
+               for( int bb = 0; bb < 16; bb++ ) 
+                   $write("%0h ", irecon[bb] );
+               $write(" }\n");
+               $write(  "ref   recon = { ");
+               for( int bb = 0; bb < 16; bb++ ) 
+                   $write("%0h ", tb_recon[bb] );
+               $write(" }\n");
+           end
+           $write("  ref: %0d %0h %0h\n", bitcount, bits, mask );
+           $write("  vec: %0d %0h %0h\n", tb_bitcount, tb_bits, tb_mask );
+           @(posedge clk);
+       end // feof
+       // Flush waves
+       for( int ii = 0; ii < 5; ii++ ) begin
+                @(negedge clk);
+                @(posedge clk);
+       end
+       $write("GOBBLE: Sim completed\n");
+       $fclose( fd );
+              for( int ii = 0; ii < 5; ii++ ) begin
+                @(negedge clk);
+                @(posedge clk);
+       end
+       $finish;
     end
+
+    
 
 endmodule
