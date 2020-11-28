@@ -552,6 +552,15 @@ module gg_process_testbench(
            if( { bitcount, bits, mask } != { tb_bitcount, tb_bits, tb_mask } ) begin
                 $write("ERROR: Bitstream mismatch\n" );
            end  
+               $write(  "      orig  = { ");
+               for( int bb = 0; bb < 16; bb++ ) 
+                   $write("%0h ", orig[bb] );
+               $write(" }\n");
+               $write(  "      pred  = { ");
+               for( int bb = 0; bb < 16; bb++ ) 
+                   $write("%0h ", pred[bb] );
+               $write(" }\n");
+           
            if( cidx != 4 && cidx !=5 ) begin         
                $write(  "dut   recon = { ");
                for( int bb = 0; bb < 16; bb++ ) 

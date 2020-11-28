@@ -936,10 +936,10 @@ module gg_iprocess
     assign dvm0 = dvmat0[ qpmod6 ];
     assign dvm1 = dvmat1[ qpmod6 ];
     assign dvm2 = dvmat2[ qpmod6 ];
-    assign dquant = { { dvm0, dvm2, dvm0, dvm2 }, 
-                      { dvm2, dvm1, dvm2, dvm1 }, 
-                      { dvm0, dvm2, dvm0, dvm2 }, 
-                      { dvm2, dvm1, dvm2, dvm1 } };
+    assign dquant = {  dvm0, dvm2, dvm0, dvm2, 
+                       dvm2, dvm1, dvm2, dvm1, 
+                       dvm0, dvm2, dvm0, dvm2, 
+                       dvm2, dvm1, dvm2, dvm1 };
     logic [28:0] f[16];
     logic signed [24:0] dprod[16]; // 13 bit signed coeff * 5+4 bit quant
     logic signed [9:0] dmul[16];
@@ -1034,7 +1034,7 @@ module gg_iprocess
             g[row * 4 + 2][16:0] = ( ( dc_flag ) ? 
                                    {    f[row * 4 + 1][15]  , f[row * 4 + 1][15:0] } :
                                    { {2{f[row * 4 + 1][15]}}, f[row * 4 + 1][15:1] })-               {    f[row * 4 + 3][15]  ,  f[row * 4 + 3][15:0] } ;
-            g[row * 4 + 3][16:0] = {    f[row * 4 + 1][15]  , f[row * 4 + 1][15:0] } -(( dc_flag ) ? {    f[row * 4 + 3][15]  ,  f[row * 4 + 3][15:0] } :
+            g[row * 4 + 3][16:0] = {    f[row * 4 + 1][15]  , f[row * 4 + 1][15:0] } +(( dc_flag ) ? {    f[row * 4 + 3][15]  ,  f[row * 4 + 3][15:0] } :
                                                                                                      { {2{f[row * 4 + 3][15]}},  f[row * 4 + 3][15:1] });
             h[row * 4 + 0][16:0] = {    g[row * 4 + 0][15]  , g[row * 4 + 0][15:0] } +               {    g[row * 4 + 3][15]  ,  g[row * 4 + 3][15:0] } ;
             h[row * 4 + 1][16:0] = {    g[row * 4 + 1][15]  , g[row * 4 + 1][15:0] } +               {    g[row * 4 + 2][15]  ,  g[row * 4 + 2][15:0] } ;
@@ -1047,7 +1047,7 @@ module gg_iprocess
             k[col + 4 * 2][16:0] = ( ( dc_flag ) ?  
                                    {    h[col + 4 * 1][15]  , h[col + 4 * 1][15:0] } :
                                    { {2{h[col + 4 * 1][15]}}, h[col + 4 * 1][15:1] })-               {    h[col + 4 * 3][15]  ,  h[col + 4 * 3][15:0] } ;
-            k[col + 4 * 3][16:0] = {    h[col + 4 * 1][15]  , h[col + 4 * 1][15:0] } -(( dc_flag ) ? {    h[col + 4 * 3][15]  ,  h[col + 4 * 3][15:0] } :
+            k[col + 4 * 3][16:0] = {    h[col + 4 * 1][15]  , h[col + 4 * 1][15:0] } +(( dc_flag ) ? {    h[col + 4 * 3][15]  ,  h[col + 4 * 3][15:0] } :
                                                                                                      { {2{h[col + 4 * 3][15]}},  h[col + 4 * 3][15:1] });
             m[col + 4 * 0][16:0] = {    k[col + 4 * 0][15]  , k[col + 4 * 0][15:0] } +               {    k[col + 4 * 3][15]  ,  k[col + 4 * 3][15:0] } ;
             m[col + 4 * 1][16:0] = {    k[col + 4 * 1][15]  , k[col + 4 * 1][15:0] } +               {    k[col + 4 * 2][15]  ,  k[col + 4 * 2][15:0] } ;
