@@ -38,7 +38,7 @@ module gg_process_testbench(
     ///////////////////////
     
     initial begin
-        #(2000ns);
+        #(20000ns);
         $write("GOBBLE: Sim terminated; hard coded time limit reached.\n");
         $finish;
     end

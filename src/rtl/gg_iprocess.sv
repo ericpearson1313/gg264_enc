@@ -948,8 +948,8 @@ module gg_iprocess
 
     always_comb begin
         for( int ii = 0; ii < 16; ii++ ) begin
-            dcoeff[ii][15:0] = ( ii == 0 && ac_flag && cb_flag ) ? dc_hold[{ 1'b0, bidx[1], 1'b0, bidx[0] }][15:0] : // sample 0,1,4,5
-                               ( ii == 0 && ac_flag && cr_flag ) ? dc_hold[{ 1'b0, bidx[1], 1'b1, bidx[0] }][15:0] : // sample 2,3,6,7
+            dcoeff[ii][15:0] = ( ii == 0 && ac_flag && cb_flag ) ? dc_hold[{ 1'b0, bidx[1], 1'b0,  bidx[0] }][15:0] : // sample 0,1,4,5
+                               ( ii == 0 && ac_flag && cr_flag ) ? dc_hold[{ 1'b0, bidx[1], 1'b1, ~bidx[0] }][15:0] : // sample 3,2,7,6
                                ( ii == 0 && ac_flag &&  y_flag ) ? dc_hold[bidx[3:0]][15:0] : // luma dc coeff
                                                                    { {3{coeff[ii][12]}}, coeff[ii][12:0] }; // regular coeff
             dmul[ii][9:0] = { 1'b0, dquant[ii][4:0], 4'b0000 };
@@ -971,13 +971,13 @@ module gg_iprocess
                 for( int ii = 0; ii < 16; ii++ ) begin
                     f[ii] = 29'd0;
                 end
-                f[ 0][28:0] = { 16'b0, coeff[0][12:0] };
-                f[ 2][28:0] = { 16'b0, coeff[2][12:0] };
-                f[ 8][28:0] = { 16'b0, coeff[8][12:0] };
-                f[10][28:0] = { 16'b0, coeff[10][12:0] };
+                f[ 0][28:0] = { {16{coeff[ 0][12]}}, coeff[0][12:0] };
+                f[ 2][28:0] = { {16{coeff[ 2][12]}}, coeff[2][12:0] };
+                f[ 8][28:0] = { {16{coeff[ 8][12]}}, coeff[8][12:0] };
+                f[10][28:0] = { {16{coeff[10][12]}}, coeff[10][12:0] };
             end else begin // just copy thru luma DC
                 for( int ii = 0; ii < 16; ii++ ) begin
-                    f[ii][28:0] = { 16'b0, coeff[ii][12:0] };
+                    f[ii][28:0] = { {16{coeff[ii][12]}}, coeff[ii][12:0] };
                 end
             end 
         end else begin // Inverse quant the ac coeffs, bring in the inverse DC
