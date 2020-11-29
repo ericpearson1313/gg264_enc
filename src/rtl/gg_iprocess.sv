@@ -539,7 +539,7 @@ module gg_iprocess
                     { 16'b0000000000000001 } : begin level_prefix[ii][3:0] = 4'd15; level_suffix_bits[ii][5:0] = 6'b000000; end     
                 endcase
                 // level_code
-                if( level_prefix[ii] == 4'd14 && suffix_length[0][2:0] == 3'd0 ) begin
+                if( level_prefix[ii] == 4'd14 && suffix_length[ii][2:0] == 3'd0 ) begin
                     coeff_len[ii][8:0] = 9'd19;
                     level_code[ii][12:0] = coeff_bitword[ii][16:13] + 14;
                 end else if ( level_prefix[ii] == 4'd15 ) begin
