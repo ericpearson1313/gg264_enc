@@ -18,3 +18,7 @@ extern const vlc_t x264_run_before_init[7][16];
 extern const int coeff_token_parse_table[5][62][4];
 extern const int total_zeros_parse_table[18][16][3];
 extern const int run_before_parse_table[7][15][3];
+
+extern const int alpha_table[52];
+extern const int beta_table[52];
+extern const int tc0_table[3][52];
