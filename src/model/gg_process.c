@@ -272,7 +272,7 @@ int gg_process_block(int qpy, int offset, int deadzone, int *ref, int *orig, int
 
 	if (ch_flag && dc_flag) {
 		coeff_table_idx = 4;
-	} else if ( dc_flag ) {
+	} else if ( dc_flag ) { // TODO: fix error
 		int nc = lefnc[0] + abvnc[0];
 		coeff_table_idx = (nc < 2) ? 0 : (nc < 4) ? 1 : (nc < 8) ? 2 : 3;
 	}
@@ -477,45 +477,43 @@ int gg_process_block(int qpy, int offset, int deadzone, int *ref, int *orig, int
 	//}
 	//printf(" } \n");
 
-	printf("%x %x %x %x %x %x %x %x\n", *bitcount, cidx, bidx, qpy, abv_oop, lef_oop, offset, deadzone);
-	for (int ii = 0; ii < 16; ii++) { printf("%3x ", orig[ii]); }
-	printf("\n");
-	for (int ii = 0; ii < 16; ii++) { printf("%3x ", ref[ii]); }
-	printf("\n");
-	for (int ii = 0; ii < 16; ii++) { printf("%3x ", ( ch_flag && dc_flag ) ? 0 : recon[ii]); }
-	printf("\n");
-	int obits[512];
-	int omask[512];
-	for (int ii = 0; ii < 512; ii++) {
-		obits[ii] = 0;
-		omask[ii] = 0;
-	}
-	int bit_index = 0;
-	for (int ii = 0; ii < vlc_idx; ii++) {
-		for (int jj = bits->vlc[ii].i_size - 1; jj >= 0; jj--) {
-			obits[512-*bitcount+bit_index] = ((bits->vlc[ii].i_bits >> jj) & 1);
-			omask[512-*bitcount+bit_index] = 1;
-			bit_index++;
-		}
-	}
-	unsigned int bitword;
-	for (int ii = 0; ii < 16; ii++) {
-		for (int jj = 0; jj < 32; jj++) {
-			bitword = ( bitword << 1 ) | ( obits[ii * 32 + jj] & 1 );
-		}
-		printf("%08x ", bitword);
-	}
-	printf("\n");
-	for (int ii = 0; ii < 16; ii++) {
-		for (int jj = 0; jj < 32; jj++) {
-			bitword = ( bitword << 1 ) | ( omask[ii * 32 + jj] & 1 );
-		}
-		printf("%08x ", bitword);
-	}
-	printf("\n");
+	//printf("%x %x %x %x %x %x %x %x\n", *bitcount, cidx, bidx, qpy, abv_oop, lef_oop, offset, deadzone);
+	//for (int ii = 0; ii < 16; ii++) { printf("%3x ", orig[ii]); }
+	//printf("\n");
+	//for (int ii = 0; ii < 16; ii++) { printf("%3x ", ref[ii]); }
+	//printf("\n");
+	//for (int ii = 0; ii < 16; ii++) { printf("%3x ", ( ch_flag && dc_flag ) ? 0 : recon[ii]); }
+	//printf("\n");
+	//int obits[512];
+	//int omask[512];
+	//for (int ii = 0; ii < 512; ii++) {
+	//	obits[ii] = 0;
+	//	omask[ii] = 0;
+	//}
+	//int bit_index = 0;
+	//for (int ii = 0; ii < vlc_idx; ii++) {
+	//	for (int jj = bits->vlc[ii].i_size - 1; jj >= 0; jj--) {
+	//		obits[512-*bitcount+bit_index] = ((bits->vlc[ii].i_bits >> jj) & 1);
+	//		omask[512-*bitcount+bit_index] = 1;
+	//		bit_index++;
+	//	}
+	//}
+	//unsigned int bitword;
+	//for (int ii = 0; ii < 16; ii++) {
+	//	for (int jj = 0; jj < 32; jj++) {
+	//		bitword = ( bitword << 1 ) | ( obits[ii * 32 + jj] & 1 );
+	//	}
+	//	printf("%08x ", bitword);
+	//}
+	//printf("\n");
+	//for (int ii = 0; ii < 16; ii++) {
+	//	for (int jj = 0; jj < 32; jj++) {
+	//		bitword = ( bitword << 1 ) | ( omask[ii * 32 + jj] & 1 );
+	//	}
+	//	printf("%08x ", bitword);
+	//}
+	//printf("\n");
 
-	
-	
 	//		bitsprintf("%1d", ((bits->vlc[ii].i_bits >> jj) & 1));
 //	}
 //}
@@ -529,7 +527,7 @@ int gg_process_block(int qpy, int offset, int deadzone, int *ref, int *orig, int
 	//////////////////////////////////////////
 
 #ifdef DECODE_SELF_TEST
-	printf(".");
+	//printf(".");
 	int test_bitcount;
 	int test_recon[16];
 	test_bitcount = gg_iprocess_block(qpy, ref, test_dc_hold, cidx, bidx, test_lefnc, test_abvnc, test_recon, bits, 0 ); // skip not tested
@@ -547,8 +545,26 @@ int gg_process_block(int qpy, int offset, int deadzone, int *ref, int *orig, int
 	if (test_error) {
 		int ii;
 		printf("Cidx %d Bidx %d test ERROR count %d\n", cidx, bidx, test_error);
-			printf("        Encode           Decode test        \n");
-			printf(" bits | %02x               %02x               \n", *bitcount, test_bitcount);
+		printf("        Encode           Decode test        \n");
+		printf(" bits | %02x               %02x               \n", *bitcount, test_bitcount);
+		printf("MBbits : 512'b");
+		//printf(" { 16'd%d, 512'b", lbitc );
+		for (int ii = 0; ii < vlc_idx; ii++) {
+			printf("_");
+			for (int jj = bits->vlc[ii].i_size - 1; jj >= 0; jj--) {
+				printf("%1d", ((bits->vlc[ii].i_bits >> jj) & 1));
+			}
+		}
+		printf(" , 512'b");
+		for (int ii = 0; ii < vlc_idx; ii++) {
+			for (int jj = bits->vlc[ii].i_size - 1; jj >= 0; jj--) {
+				printf("1");
+			}
+		}
+		printf(" } \n");
+
+
+
 		for (ii = 0; ii < 16; ii+=4) {
 			printf("recon | %02x %02x %02x %02x |  | %02x %02x %02x %02x\n", (unsigned char)recon[ii + 0], (unsigned char)recon[ii + 2], (unsigned char)recon[ii + 2], (unsigned char)recon[ii + 3], 
 				(unsigned char)test_recon[ii + 0], (unsigned char)test_recon[ii + 1], (unsigned char)test_recon[ii + 2], (unsigned char)test_recon[ii + 3]);

@@ -4,13 +4,20 @@
 #define _CRT_SECURE_NO_WARNINGS 1
 #include <stdio.h>
 #include "gg_process.h"
+#include "gg_deblock.h"
 
 #define PIC_WIDTH 720
 #define PIC_HEIGHT 480
 
 int mb_width = PIC_WIDTH>>4;
 int mb_height = PIC_HEIGHT>>4;
+
+// Parameters 
 int disable_deblocking_filter_idc = 1; // 0-enable, 1-disable, 2-disable across slices boundaries
+int pintra_disable_deblocking_filter_idc = 0; // pintra frames :0-enable, 1-disable, 2-disable across slices boundaries
+int filterOffsetA = 0;
+int filterOffsetB = 0;
+
 FILE* ggo_fp;
 int ggo_bitpos;
 char ggo_char;
@@ -20,6 +27,8 @@ int ggo_frame;
 int ggo_intra_col;
 
 int ggo_prev_zero; // count of previous zero's
+
+DeblockCtx dbp; // Deblock private data
 
 // orig image
 FILE* ggi_fp;
@@ -35,6 +44,13 @@ char ggo_recon_cr[1920 * 1088 / 4];
 char ggo_ref_y[2][1920 * 1088];
 char ggo_ref_cb[2][1920 * 1088 / 4];
 char ggo_ref_cr[2][1920 * 1088 / 4];
+// recon stats
+char recon_mb_stat[3][1920 * 1088 / 256];    // 0-qp, 1-refidx, 2-pcm
+char recon_nz_y[1920 * 1088 / 16];  // non-zero coeffs in blk
+char recon_nz_cb[1920 * 1088 / 64];
+char recon_nz_cr[1920 * 1088 / 64];
+
+
 
 
 void ggo_init(const char* name)
@@ -520,6 +536,7 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
     int dz = 0;
     char abvnc_y[PIC_WIDTH >> 2], abvnc_cb[PIC_WIDTH >> 3], abvnc_cr[PIC_WIDTH >> 3];
     char lefnc_y[4], lefnc_cb[2], lefnc_cr[2];
+    int num_coeff_y[16], num_coeff_cb[4], num_coeff_cr[4];
 
     // Nal unit 
     ggo_put_start(3);
@@ -546,8 +563,8 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
     ggo_put_null("}");
 
     ggo_put_se( qp - 26, "slice_qp_delta se(v)        "); // assume pps default is 26. qp in {0,51}
-    ggo_put_ue(disable_deblocking_filter_idc, "disable_deblocking_filter_idc ue(v)");
-    if (disable_deblocking_filter_idc != 1) {
+    ggo_put_ue(pintra_disable_deblocking_filter_idc, "disable_deblocking_filter_idc ue(v)");
+    if (pintra_disable_deblocking_filter_idc != 1) {
         ggo_put_se(0, "slice_alpha_c0_offset_div2 se(v)");
         ggo_put_se(0, "slice_beta_offset_div2 se(v)");
     }
@@ -566,6 +583,11 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
     }
 
 
+    // Init Deblock;
+
+    gg_deblock_init( &dbp, pintra_disable_deblocking_filter_idc, filterOffsetA, filterOffsetB, mb_width, mb_height ); // allocate and deblock for start of single slice frame
+
+    // Process frame of macroblocks
     for (int yy = 0; yy < mb_height; yy++) {
         // Clear lefnc 
         for (int ii = 0; ii < 4 ; ii++) {
@@ -577,6 +599,7 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
         }
 
         for (int xx = 0; xx < mb_width; xx++) {
+            int mb_type = 0;
             int cbp = 0;
             int macroblock_layer_length = 0;
             int num_coeff = 0;
@@ -617,34 +640,34 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
             }
             // Luma UL
             num_coeff = 0;
-            num_coeff += gg_process_block(qp, ofs, dz, ref_y[0], orig_y[0], dc_hold[0], 0, 0, lefnc_y, abvnc_y + xx * 4, recon_y[0], &bits_y[0], &bitcount[0], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, ref_y[1], orig_y[1], dc_hold[0], 0, 1, lefnc_y, abvnc_y + xx * 4, recon_y[1], &bits_y[1], &bitcount[1], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, ref_y[4], orig_y[4], dc_hold[0], 0, 2, lefnc_y, abvnc_y + xx * 4, recon_y[4], &bits_y[2], &bitcount[2], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, ref_y[5], orig_y[5], dc_hold[0], 0, 3, lefnc_y, abvnc_y + xx * 4, recon_y[5], &bits_y[3], &bitcount[3], &sad, &ssd);
+            num_coeff += num_coeff_y[0] = gg_process_block(qp, ofs, dz, ref_y[0], orig_y[0], dc_hold[0], 0, 0, lefnc_y, abvnc_y + xx * 4, recon_y[0], &bits_y[0], &bitcount[0], &sad, &ssd);
+            num_coeff += num_coeff_y[1] = gg_process_block(qp, ofs, dz, ref_y[1], orig_y[1], dc_hold[0], 0, 1, lefnc_y, abvnc_y + xx * 4, recon_y[1], &bits_y[1], &bitcount[1], &sad, &ssd);
+            num_coeff += num_coeff_y[2] = gg_process_block(qp, ofs, dz, ref_y[4], orig_y[4], dc_hold[0], 0, 2, lefnc_y, abvnc_y + xx * 4, recon_y[4], &bits_y[2], &bitcount[2], &sad, &ssd);
+            num_coeff += num_coeff_y[3] = gg_process_block(qp, ofs, dz, ref_y[5], orig_y[5], dc_hold[0], 0, 3, lefnc_y, abvnc_y + xx * 4, recon_y[5], &bits_y[3], &bitcount[3], &sad, &ssd);
             cbp |= (num_coeff) ? 1 : 0;
             macroblock_layer_length += (num_coeff) ? (bitcount[0] + bitcount[1] + bitcount[2] + bitcount[3]) : 0;
             // Luma UR
             num_coeff = 0;
-            num_coeff += gg_process_block(qp, ofs, dz, ref_y[2], orig_y[2], dc_hold[0], 0, 4, lefnc_y, abvnc_y + xx * 4, recon_y[2], &bits_y[4], &bitcount[0], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, ref_y[3], orig_y[3], dc_hold[0], 0, 5, lefnc_y, abvnc_y + xx * 4, recon_y[3], &bits_y[5], &bitcount[1], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, ref_y[6], orig_y[6], dc_hold[0], 0, 6, lefnc_y, abvnc_y + xx * 4, recon_y[6], &bits_y[6], &bitcount[2], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, ref_y[7], orig_y[7], dc_hold[0], 0, 7, lefnc_y, abvnc_y + xx * 4, recon_y[7], &bits_y[7], &bitcount[3], &sad, &ssd);
+            num_coeff += num_coeff_y[4] = gg_process_block(qp, ofs, dz, ref_y[2], orig_y[2], dc_hold[0], 0, 4, lefnc_y, abvnc_y + xx * 4, recon_y[2], &bits_y[4], &bitcount[0], &sad, &ssd);
+            num_coeff += num_coeff_y[5] = gg_process_block(qp, ofs, dz, ref_y[3], orig_y[3], dc_hold[0], 0, 5, lefnc_y, abvnc_y + xx * 4, recon_y[3], &bits_y[5], &bitcount[1], &sad, &ssd);
+            num_coeff += num_coeff_y[6] = gg_process_block(qp, ofs, dz, ref_y[6], orig_y[6], dc_hold[0], 0, 6, lefnc_y, abvnc_y + xx * 4, recon_y[6], &bits_y[6], &bitcount[2], &sad, &ssd);
+            num_coeff += num_coeff_y[7] = gg_process_block(qp, ofs, dz, ref_y[7], orig_y[7], dc_hold[0], 0, 7, lefnc_y, abvnc_y + xx * 4, recon_y[7], &bits_y[7], &bitcount[3], &sad, &ssd);
             cbp |= (num_coeff) ? 2 : 0;
             macroblock_layer_length += (num_coeff) ? (bitcount[0] + bitcount[1] + bitcount[2] + bitcount[3]) : 0;
             // Luma LL
             num_coeff = 0;
-            num_coeff += gg_process_block(qp, ofs, dz, ref_y[8], orig_y[8], dc_hold[0], 0, 8, lefnc_y, abvnc_y + xx * 4, recon_y[8], &bits_y[8], &bitcount[0], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, ref_y[9], orig_y[9], dc_hold[0], 0, 9, lefnc_y, abvnc_y + xx * 4, recon_y[9], &bits_y[9], &bitcount[1], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, ref_y[12], orig_y[12], dc_hold[0], 0, 10, lefnc_y, abvnc_y + xx * 4, recon_y[12], &bits_y[10], &bitcount[2], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, ref_y[13], orig_y[13], dc_hold[0], 0, 11, lefnc_y, abvnc_y + xx * 4, recon_y[13], &bits_y[11], &bitcount[3], &sad, &ssd);
+            num_coeff += num_coeff_y[8] = gg_process_block(qp, ofs, dz, ref_y[8], orig_y[8], dc_hold[0], 0, 8, lefnc_y, abvnc_y + xx * 4, recon_y[8], &bits_y[8], &bitcount[0], &sad, &ssd);
+            num_coeff += num_coeff_y[9] = gg_process_block(qp, ofs, dz, ref_y[9], orig_y[9], dc_hold[0], 0, 9, lefnc_y, abvnc_y + xx * 4, recon_y[9], &bits_y[9], &bitcount[1], &sad, &ssd);
+            num_coeff += num_coeff_y[10]= gg_process_block(qp, ofs, dz, ref_y[12], orig_y[12], dc_hold[0], 0, 10, lefnc_y, abvnc_y + xx * 4, recon_y[12], &bits_y[10], &bitcount[2], &sad, &ssd);
+            num_coeff += num_coeff_y[11]= gg_process_block(qp, ofs, dz, ref_y[13], orig_y[13], dc_hold[0], 0, 11, lefnc_y, abvnc_y + xx * 4, recon_y[13], &bits_y[11], &bitcount[3], &sad, &ssd);
             cbp |= (num_coeff) ? 4 : 0;
             macroblock_layer_length += (num_coeff) ? (bitcount[0] + bitcount[1] + bitcount[2] + bitcount[3]) : 0;
             // Luma LR
             num_coeff = 0;
-            num_coeff += gg_process_block(qp, ofs, dz, ref_y[10], orig_y[10], dc_hold[0], 0, 12, lefnc_y, abvnc_y + xx * 4, recon_y[10], &bits_y[12], &bitcount[0], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, ref_y[11], orig_y[11], dc_hold[0], 0, 13, lefnc_y, abvnc_y + xx * 4, recon_y[11], &bits_y[13], &bitcount[1], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, ref_y[14], orig_y[14], dc_hold[0], 0, 14, lefnc_y, abvnc_y + xx * 4, recon_y[14], &bits_y[14], &bitcount[2], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, ref_y[15], orig_y[15], dc_hold[0], 0, 15, lefnc_y, abvnc_y + xx * 4, recon_y[15], &bits_y[15], &bitcount[3], &sad, &ssd);
+            num_coeff += num_coeff_y[12] = gg_process_block(qp, ofs, dz, ref_y[10], orig_y[10], dc_hold[0], 0, 12, lefnc_y, abvnc_y + xx * 4, recon_y[10], &bits_y[12], &bitcount[0], &sad, &ssd);
+            num_coeff += num_coeff_y[13] = gg_process_block(qp, ofs, dz, ref_y[11], orig_y[11], dc_hold[0], 0, 13, lefnc_y, abvnc_y + xx * 4, recon_y[11], &bits_y[13], &bitcount[1], &sad, &ssd);
+            num_coeff += num_coeff_y[14] = gg_process_block(qp, ofs, dz, ref_y[14], orig_y[14], dc_hold[0], 0, 14, lefnc_y, abvnc_y + xx * 4, recon_y[14], &bits_y[14], &bitcount[2], &sad, &ssd);
+            num_coeff += num_coeff_y[15] = gg_process_block(qp, ofs, dz, ref_y[15], orig_y[15], dc_hold[0], 0, 15, lefnc_y, abvnc_y + xx * 4, recon_y[15], &bits_y[15], &bitcount[3], &sad, &ssd);
             cbp |= (num_coeff) ? 8 : 0;
             macroblock_layer_length += (num_coeff) ? (bitcount[0] + bitcount[1] + bitcount[2] + bitcount[3]) : 0;
 
@@ -657,14 +680,14 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
             macroblock_layer_length += (num_coeff) ? (bitcount[0] + bitcount[1]) : 0;
             // chroma AC
             num_coeff = 0;
-            num_coeff += gg_process_block(qp, ofs, dz, &(ref_cb[0][0]), &(orig_cb[0][0]), &(dc_hold[1][0]), 2, 0, lefnc_cb, abvnc_cb + xx * 2, &(recon_cb[0][0]), &bits_cb[0], &bitcount[0], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, &(ref_cb[1][0]), &(orig_cb[1][0]), &(dc_hold[1][0]), 2, 1, lefnc_cb, abvnc_cb + xx * 2, &(recon_cb[1][0]), &bits_cb[1], &bitcount[1], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, &(ref_cb[2][0]), &(orig_cb[2][0]), &(dc_hold[1][0]), 2, 2, lefnc_cb, abvnc_cb + xx * 2, &(recon_cb[2][0]), &bits_cb[2], &bitcount[2], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, &(ref_cb[3][0]), &(orig_cb[3][0]), &(dc_hold[1][0]), 2, 3, lefnc_cb, abvnc_cb + xx * 2, &(recon_cb[3][0]), &bits_cb[3], &bitcount[3], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, &(ref_cr[0][0]), &(orig_cr[0][0]), &(dc_hold[2][0]), 3, 0, lefnc_cr, abvnc_cr + xx * 2, &(recon_cr[0][0]), &bits_cr[0], &bitcount[4], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, &(ref_cr[1][0]), &(orig_cr[1][0]), &(dc_hold[2][0]), 3, 1, lefnc_cr, abvnc_cr + xx * 2, &(recon_cr[1][0]), &bits_cr[1], &bitcount[5], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, &(ref_cr[2][0]), &(orig_cr[2][0]), &(dc_hold[2][0]), 3, 2, lefnc_cr, abvnc_cr + xx * 2, &(recon_cr[2][0]), &bits_cr[2], &bitcount[6], &sad, &ssd);
-            num_coeff += gg_process_block(qp, ofs, dz, &(ref_cr[3][0]), &(orig_cr[3][0]), &(dc_hold[2][0]), 3, 3, lefnc_cr, abvnc_cr + xx * 2, &(recon_cr[3][0]), &bits_cr[3], &bitcount[7], &sad, &ssd);
+            num_coeff += num_coeff_cb[0] = gg_process_block(qp, ofs, dz, &(ref_cb[0][0]), &(orig_cb[0][0]), &(dc_hold[1][0]), 2, 0, lefnc_cb, abvnc_cb + xx * 2, &(recon_cb[0][0]), &bits_cb[0], &bitcount[0], &sad, &ssd);
+            num_coeff += num_coeff_cb[1] = gg_process_block(qp, ofs, dz, &(ref_cb[1][0]), &(orig_cb[1][0]), &(dc_hold[1][0]), 2, 1, lefnc_cb, abvnc_cb + xx * 2, &(recon_cb[1][0]), &bits_cb[1], &bitcount[1], &sad, &ssd);
+            num_coeff += num_coeff_cb[2] = gg_process_block(qp, ofs, dz, &(ref_cb[2][0]), &(orig_cb[2][0]), &(dc_hold[1][0]), 2, 2, lefnc_cb, abvnc_cb + xx * 2, &(recon_cb[2][0]), &bits_cb[2], &bitcount[2], &sad, &ssd);
+            num_coeff += num_coeff_cb[3] = gg_process_block(qp, ofs, dz, &(ref_cb[3][0]), &(orig_cb[3][0]), &(dc_hold[1][0]), 2, 3, lefnc_cb, abvnc_cb + xx * 2, &(recon_cb[3][0]), &bits_cb[3], &bitcount[3], &sad, &ssd);
+            num_coeff += num_coeff_cr[0] = gg_process_block(qp, ofs, dz, &(ref_cr[0][0]), &(orig_cr[0][0]), &(dc_hold[2][0]), 3, 0, lefnc_cr, abvnc_cr + xx * 2, &(recon_cr[0][0]), &bits_cr[0], &bitcount[4], &sad, &ssd);
+            num_coeff += num_coeff_cr[1] = gg_process_block(qp, ofs, dz, &(ref_cr[1][0]), &(orig_cr[1][0]), &(dc_hold[2][0]), 3, 1, lefnc_cr, abvnc_cr + xx * 2, &(recon_cr[1][0]), &bits_cr[1], &bitcount[5], &sad, &ssd);
+            num_coeff += num_coeff_cr[2] = gg_process_block(qp, ofs, dz, &(ref_cr[2][0]), &(orig_cr[2][0]), &(dc_hold[2][0]), 3, 2, lefnc_cr, abvnc_cr + xx * 2, &(recon_cr[2][0]), &bits_cr[2], &bitcount[6], &sad, &ssd);
+            num_coeff += num_coeff_cr[3] = gg_process_block(qp, ofs, dz, &(ref_cr[3][0]), &(orig_cr[3][0]), &(dc_hold[2][0]), 3, 3, lefnc_cr, abvnc_cr + xx * 2, &(recon_cr[3][0]), &bits_cr[3], &bitcount[7], &sad, &ssd);
             cbp = (num_coeff) ? 0x20 | (cbp & 0xf) : cbp;
             macroblock_layer_length += (num_coeff) ? (bitcount[0] + bitcount[1] + bitcount[2] + bitcount[3] +
                 bitcount[4] + bitcount[5] + bitcount[6] + bitcount[7]) : 0;
@@ -673,6 +696,7 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
 
             // Now and only now, we can nominally code the macroblock, skips not possible when ref1 is used
             if (refidx == 0 && cbp == 0) { // skip this MB if ref=0 and cbp=0
+                mb_type = GG_MBTYPE_SKIP;
                 skip_run++;
                 // Write Recon
                 for (int py = 0; py < 16; py++)
@@ -695,6 +719,7 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
             }
             else if (macroblock_layer_length > 3088) { // A.3.1.n, max MB length is 3200, however PCM is pel(3072)+mbtype(9)+max align(7)=3088 
 //          else if ( xx % 10 == 1 && yy % 10 == 1) { // just force sparse pcm to test 
+                mb_type = GG_MBTYPE_IPCM;
                 ggo_put_ue(skip_run, "mb_skip_run ue(v)");
                 skip_run = 0;
                 ggo_put_null("macroblock_layer() {           ");
@@ -730,6 +755,7 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
                 abvnc_y[xx * 4 + 3] = 16; abvnc_cr[xx * 2 + 1] = 16;
             }
             else {
+                mb_type = GG_MBTYPE_INTER;
                 ggo_put_ue(skip_run, "mb_skip_run ue(v)");
                 skip_run = 0;
                 ggo_put_null("macroblock_layer() {           ");
@@ -799,6 +825,11 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
                                 ggo_recon_cb[xx * 8 + bx * 4 + px + (yy * 8 + by * 4 + py) * mb_width * 8] = recon_cb[by * 2 + bx][py * 4 + px];
                                 ggo_recon_cr[xx * 8 + bx * 4 + px + (yy * 8 + by * 4 + py) * mb_width * 8] = recon_cr[by * 2 + bx][py * 4 + px];
                             }
+            }
+
+            // Deblock Macroblock after skip/pcm/inter decision finalized
+            if (pintra_disable_deblocking_filter_idc != 1) {
+                gg_deblock_mb(&dbp, xx, yy, ggo_recon_y,  ggo_recon_cb, ggo_recon_cr, num_coeff_y, num_coeff_cb, num_coeff_cr, qp, refidx, mb_type );
             }
         }
     }

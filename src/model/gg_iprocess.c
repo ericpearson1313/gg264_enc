@@ -80,7 +80,7 @@ int gg_iprocess_block(int qpy, int* ref, int* dc_hold, int cidx, int bidx, char*
 	if (ch_flag && dc_flag) {
 		coeff_table_idx = 4;
 	}
-	else if (dc_flag) {
+	else if (dc_flag) { // todo fix error
 		int nc = lefnc[0] + abvnc[0];
 		coeff_table_idx = (nc < 2) ? 0 : (nc < 4) ? 1 : (nc < 8) ? 2 : 3;
 	}
@@ -130,7 +130,7 @@ int gg_iprocess_block(int qpy, int* ref, int* dc_hold, int cidx, int bidx, char*
 			(coeff_table_idx == 0 && coeff_token_lead_zeros == 5 && (coeff_token_bitword & (1 << 26))) ||
 			(coeff_table_idx == 1 && coeff_token_lead_zeros == 2 && (coeff_token_bitword & (1 << 29))) ||
 			(coeff_table_idx == 1 && coeff_token_lead_zeros == 3 && (coeff_token_bitword & (1 << 28))) ||
-			(coeff_table_idx == 1 && coeff_token_lead_zeros == 11 && (coeff_token_bitword & (1 << 18))) ||
+			(coeff_table_idx == 1 && coeff_token_lead_zeros == 11 && (coeff_token_bitword & (1 << 20))) ||
 			(coeff_table_idx == 2 && coeff_token_lead_zeros == 7 && (coeff_token_bitword & (1 << 24)) && (coeff_token_bitword & (1 << 23)))) {
 			coeff_token_length--;
 		}

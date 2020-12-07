@@ -14,6 +14,14 @@ typedef struct _bitbuffer {
     vlc_t vlc[64];
 } bitbuffer;
 
+#define GG_MBTYPE_SKIP  0
+#define GG_MBTYPE_IPCM  1
+#define GG_MBTYPE_INTER 2
+#define GG_MBTYPE_INTRA 3
+
 int gg_process_block(int qpy, int offset, int deadzone, int* ref, int* orig, int* dc_hold, int cidx, int bidx, char *lefnc, char *abvnc, int* recon, bitbuffer *bits, int* bitcount, int* sad, int* ssd);
 int gg_iprocess_block(int qpy, int* ref, int* dc_hold, int cidx, int bidx, char* lefnc, char* abvnc, int* recon, bitbuffer* bits, int skip);
 void test_run_before();
+
+
+
