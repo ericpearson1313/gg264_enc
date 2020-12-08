@@ -255,7 +255,7 @@ void gg_deblock_mb(DeblockCtx* dbp, int mbx, int mby, char *recon_y, char *recon
 	dbp->ring_idx = (dbp->ring_idx + 24) & 0x3F;
 
 	//if (mbx == 6 && mby == 4)
-	//	printf("%");
+	//	printf("Z");
 
 	// load macroblock's block & info into ring in decode order
 	for (bidx = 0; bidx < 24; bidx++) {
@@ -404,7 +404,9 @@ void gg_deblock_mb(DeblockCtx* dbp, int mbx, int mby, char *recon_y, char *recon
 	}
 
 	if (mby == dbp->mb_height - 1) {
-		WriteBlkY(recon_y, -1, 3, LefPtr(15));
+		if (mbx) {
+			WriteBlkY(recon_y, -1, 3, LefPtr(15));
+		}
 		WriteBlkY(recon_y, 0, 3, BlkPtr(10));
 		WriteBlkY(recon_y, 1, 3, BlkPtr(11));
 		WriteBlkY(recon_y, 2, 3, BlkPtr(14));
@@ -448,8 +450,10 @@ void gg_deblock_mb(DeblockCtx* dbp, int mbx, int mby, char *recon_y, char *recon
 		WriteBlkC(recon_cr, 1, 0, BlkPtr(21));
 	}
 	if (mby == dbp->mb_height - 1) {
-		WriteBlkC(recon_cb, -1, 1, LefPtr(19));
-		WriteBlkC(recon_cr, -1, 1, LefPtr(23));
+		if (mbx) {
+			WriteBlkC(recon_cb, -1, 1, LefPtr(19));
+			WriteBlkC(recon_cr, -1, 1, LefPtr(23));
+		}
 		WriteBlkC(recon_cb, 0, 1, BlkPtr(18));
 		WriteBlkC(recon_cr, 0, 1, BlkPtr(22));
 	}
@@ -468,15 +472,6 @@ void gg_deblock_mb(DeblockCtx* dbp, int mbx, int mby, char *recon_y, char *recon
 		CopyBlk(AbvPtr(5), BlkPtr(19));
 		CopyBlk(AbvPtr(7), BlkPtr(23));
 	}
-
-
-	// TODO : REMOVE
-	// Test, just write back the Luma
-	//for( int bidx = 0; bidx < 16; bidx++ ) {
-	//	WriteBlkY(recon_y, ((bidx & 1) ? 1 : 0) + ((bidx & 4) ? 2 : 0), ((bidx & 2) ? 1 : 0) + ((bidx & 8) ? 2 : 0), BlkPtr(bidx));
-	//}
-	
-
 }
 
 
