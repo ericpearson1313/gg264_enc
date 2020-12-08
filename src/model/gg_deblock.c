@@ -301,151 +301,151 @@ void gg_deblock_mb(DeblockCtx* dbp, int mbx, int mby, char *recon_y, char *recon
 	// in block order, with filter/write/copy early as possible to mimic HW
 
 	// 0
-	if( nlef ) deblock_y4(dbp,  0, 0, BlkPtr(0) , LefPtr(5) , &bSh[0] ); 
+	if (nlef) deblock_y4(dbp, 0, 0, BlkPtr(0), LefPtr(5), &bSh[0]);
 	if (nlef) WriteBlkY(recon_y, -1, 0, LefPtr(5));
 
 	// 1
-	if( alwy ) deblock_y4(dbp,  1, 0, BlkPtr(1) , BlkPtr(0) , &bSh[4] );
-	if( ntop ) deblock_y4(dbp,  0, 1, BlkPtr(0) , AbvPtr(0) , &bSv[0] ); 
-	if (ntop) WriteBlkY(recon_y , 0, -1, AbvPtr(0));
+	if (alwy) deblock_y4(dbp, 1, 0, BlkPtr(1), BlkPtr(0), &bSh[4]);
+	if (ntop) deblock_y4(dbp, 0, 1, BlkPtr(0), AbvPtr(0), &bSv[0]);
+	if (ntop) WriteBlkY(recon_y, 0, -1, AbvPtr(0));
 
 	// 2
-	if( nlef ) deblock_y4(dbp,  2, 0, BlkPtr(2) , LefPtr(7) , &bSh[1] ); 
+	if (nlef) deblock_y4(dbp, 2, 0, BlkPtr(2), LefPtr(7), &bSh[1]);
 	if (nlef) WriteBlkY(recon_y, -1, 1, LefPtr(7));
 
 	// 3
-	if( alwy ) deblock_y4(dbp,  3, 0, BlkPtr(3) , BlkPtr(2) , &bSh[5] );
-	if( alwy ) deblock_y4(dbp,  2, 1, BlkPtr(2) , BlkPtr(0) , &bSv[4] );
+	if (alwy) deblock_y4(dbp, 3, 0, BlkPtr(3), BlkPtr(2), &bSh[5]);
+	if (alwy) deblock_y4(dbp, 2, 1, BlkPtr(2), BlkPtr(0), &bSv[4]);
 	if (alwy) WriteBlkY(recon_y, 0, 0, BlkPtr(0));
 
 	// 4
-	if( alwy ) deblock_y4(dbp,  4, 0, BlkPtr(4) , BlkPtr(1) , &bSh[8] );
-	if( ntop ) deblock_y4(dbp,  1, 1, BlkPtr(1) , AbvPtr(1) , &bSv[1] ); 
+	if (alwy) deblock_y4(dbp, 4, 0, BlkPtr(4), BlkPtr(1), &bSh[8]);
+	if (ntop) deblock_y4(dbp, 1, 1, BlkPtr(1), AbvPtr(1), &bSv[1]);
 	if (ntop) WriteBlkY(recon_y, 1, -1, AbvPtr(1));
 
 	// 5
-	if( alwy ) deblock_y4(dbp,  5, 0, BlkPtr(5) , BlkPtr(4) , &bSh[12]);
-	if( ntop ) deblock_y4(dbp,  4, 1, BlkPtr(4) , AbvPtr(2) , &bSv[2] ); 
-	if( ntop ) deblock_y4(dbp,  5, 1, BlkPtr(5) , AbvPtr(3) , &bSv[3] ); 
+	if (alwy) deblock_y4(dbp, 5, 0, BlkPtr(5), BlkPtr(4), &bSh[12]);
+	if (ntop) deblock_y4(dbp, 4, 1, BlkPtr(4), AbvPtr(2), &bSv[2]);
+	if (ntop) deblock_y4(dbp, 5, 1, BlkPtr(5), AbvPtr(3), &bSv[3]);
 	if (ntop) WriteBlkY(recon_y, 2, -1, AbvPtr(2));
 	if (ntop) WriteBlkY(recon_y, 3, -1, AbvPtr(3));
 
 	// 6
-	if( alwy ) deblock_y4(dbp,  6, 0, BlkPtr(6) , BlkPtr(3) , &bSh[9] );
-	if( alwy ) deblock_y4(dbp,  3, 1, BlkPtr(3) , BlkPtr(1) , &bSv[5] );
+	if (alwy) deblock_y4(dbp, 6, 0, BlkPtr(6), BlkPtr(3), &bSh[9]);
+	if (alwy) deblock_y4(dbp, 3, 1, BlkPtr(3), BlkPtr(1), &bSv[5]);
 	if (alwy) WriteBlkY(recon_y, 1, 0, BlkPtr(1));
 
 	// 7
-	if( alwy ) deblock_y4(dbp,  7, 0, BlkPtr(7) , BlkPtr(6) , &bSh[13]);
-	if( alwy ) deblock_y4(dbp,  6, 1, BlkPtr(6) , BlkPtr(4) , &bSv[6] );
-	if( alwy ) deblock_y4(dbp,  7, 1, BlkPtr(7) , BlkPtr(5) , &bSv[7] );
+	if (alwy) deblock_y4(dbp, 7, 0, BlkPtr(7), BlkPtr(6), &bSh[13]);
+	if (alwy) deblock_y4(dbp, 6, 1, BlkPtr(6), BlkPtr(4), &bSv[6]);
+	if (alwy) deblock_y4(dbp, 7, 1, BlkPtr(7), BlkPtr(5), &bSv[7]);
 	if (alwy) WriteBlkY(recon_y, 2, 0, BlkPtr(4));
 	if (rpic) WriteBlkY(recon_y, 3, 0, BlkPtr(5));
 
 	// 8
-	if( nlef ) deblock_y4(dbp,  8, 0, BlkPtr(8) , LefPtr(13), &bSh[2] ); 
+	if (nlef) deblock_y4(dbp, 8, 0, BlkPtr(8), LefPtr(13), &bSh[2]);
 	if (nlef) WriteBlkY(recon_y, -1, 2, LefPtr(13));
 
 	// 9
-	if( alwy ) deblock_y4(dbp,  9, 0, BlkPtr(9) , BlkPtr(8) , &bSh[6] );
-	if( alwy ) deblock_y4(dbp,  8, 1, BlkPtr(8) , BlkPtr(2) , &bSv[8] );
+	if (alwy) deblock_y4(dbp, 9, 0, BlkPtr(9), BlkPtr(8), &bSh[6]);
+	if (alwy) deblock_y4(dbp, 8, 1, BlkPtr(8), BlkPtr(2), &bSv[8]);
 	if (alwy) WriteBlkY(recon_y, 0, 1, BlkPtr(2));
 
 	// 10
-	if( nlef ) deblock_y4(dbp, 10, 0, BlkPtr(10), LefPtr(15), &bSh[3] ); 
+	if (nlef) deblock_y4(dbp, 10, 0, BlkPtr(10), LefPtr(15), &bSh[3]);
 	if (nlbp) WriteBlkY(recon_y, -1, 3, LefPtr(15));
-	if (nlef) CopyBlk(AlePtr(3), LefPtr(15)); 
+	if (nlef) CopyBlk(AlePtr(3), LefPtr(15));
 
 	// 11
-	if( alwy ) deblock_y4(dbp, 11, 0, BlkPtr(11), BlkPtr(10), &bSh[7] );
-	if( alwy ) deblock_y4(dbp, 10, 1, BlkPtr(10), BlkPtr(8) , &bSv[12]);
+	if (alwy) deblock_y4(dbp, 11, 0, BlkPtr(11), BlkPtr(10), &bSh[7]);
+	if (alwy) deblock_y4(dbp, 10, 1, BlkPtr(10), BlkPtr(8), &bSv[12]);
 	if (bpic) WriteBlkY(recon_y, 0, 3, BlkPtr(10));
 	if (alwy) WriteBlkY(recon_y, 0, 2, BlkPtr(8));
-	if (alwy) CopyBlk(AbvPtr(0), BlkPtr(10)); 
+	if (alwy) CopyBlk(AbvPtr(0), BlkPtr(10));
 
 	// 12
-	if( alwy ) deblock_y4(dbp, 12, 0, BlkPtr(12), BlkPtr(9) , &bSh[10]);
-	if( alwy ) deblock_y4(dbp,  9, 1, BlkPtr(9) , BlkPtr(3) , &bSv[9] );
+	if (alwy) deblock_y4(dbp, 12, 0, BlkPtr(12), BlkPtr(9), &bSh[10]);
+	if (alwy) deblock_y4(dbp, 9, 1, BlkPtr(9), BlkPtr(3), &bSv[9]);
 	if (alwy) WriteBlkY(recon_y, 1, 1, BlkPtr(3));
 
 	// 13
-	if( alwy ) deblock_y4(dbp, 13, 0, BlkPtr(13), BlkPtr(12), &bSh[14]);
-	if( alwy ) deblock_y4(dbp, 12, 1, BlkPtr(12), BlkPtr(6) , &bSv[10]);
-	if( alwy ) deblock_y4(dbp, 13, 1, BlkPtr(13), BlkPtr(7) , &bSv[11]);
+	if (alwy) deblock_y4(dbp, 13, 0, BlkPtr(13), BlkPtr(12), &bSh[14]);
+	if (alwy) deblock_y4(dbp, 12, 1, BlkPtr(12), BlkPtr(6), &bSv[10]);
+	if (alwy) deblock_y4(dbp, 13, 1, BlkPtr(13), BlkPtr(7), &bSv[11]);
 	if (alwy) WriteBlkY(recon_y, 2, 1, BlkPtr(6));
 	if (rpic) WriteBlkY(recon_y, 3, 1, BlkPtr(7));
 
 	// 14
-	if( alwy ) deblock_y4(dbp, 14, 0, BlkPtr(14), BlkPtr(11), &bSh[11]);
-	if( alwy ) deblock_y4(dbp, 11, 1, BlkPtr(11), BlkPtr(9) , &bSv[13]);
+	if (alwy) deblock_y4(dbp, 14, 0, BlkPtr(14), BlkPtr(11), &bSh[11]);
+	if (alwy) deblock_y4(dbp, 11, 1, BlkPtr(11), BlkPtr(9), &bSv[13]);
 	if (alwy) WriteBlkY(recon_y, 1, 2, BlkPtr(9));
 	if (bpic) WriteBlkY(recon_y, 1, 3, BlkPtr(11));
-	if (alwy) CopyBlk(AbvPtr(1), BlkPtr(11)); 
+	if (alwy) CopyBlk(AbvPtr(1), BlkPtr(11));
 
 	// 15
-	if( alwy ) deblock_y4(dbp, 15, 0, BlkPtr(15), BlkPtr(14), &bSh[15]);
-	if( alwy ) deblock_y4(dbp, 14, 1, BlkPtr(14), BlkPtr(12), &bSv[14]);
-	if( alwy ) deblock_y4(dbp, 15, 1, BlkPtr(15), BlkPtr(13), &bSv[15]);
+	if (alwy) deblock_y4(dbp, 15, 0, BlkPtr(15), BlkPtr(14), &bSh[15]);
+	if (alwy) deblock_y4(dbp, 14, 1, BlkPtr(14), BlkPtr(12), &bSv[14]);
+	if (alwy) deblock_y4(dbp, 15, 1, BlkPtr(15), BlkPtr(13), &bSv[15]);
 	if (alwy) WriteBlkY(recon_y, 2, 2, BlkPtr(12));
 	if (rpic) WriteBlkY(recon_y, 3, 2, BlkPtr(13));
 	if (bpic) WriteBlkY(recon_y, 2, 3, BlkPtr(14));
 	if (brcn) WriteBlkY(recon_y, 3, 3, BlkPtr(15));
-	if (alwy) CopyBlk(AbvPtr(2), BlkPtr(14)); 
-	if (rpic) CopyBlk(AbvPtr(3), BlkPtr(15)); 
+	if (alwy) CopyBlk(AbvPtr(2), BlkPtr(14));
+	if (rpic) CopyBlk(AbvPtr(3), BlkPtr(15));
 
 	// 16
-	if( nlef ) deblock_c4(dbp,  0, 0, BlkPtr(16), LefPtr(17), &bSh[0] );
+	if (nlef) deblock_c4(dbp, 0, 0, BlkPtr(16), LefPtr(17), &bSh[0]);
 	if (nlef) WriteBlkC(recon_cb, -1, 0, LefPtr(17));
 
 	// 17
-	if( alwy ) deblock_c4(dbp,  1, 0, BlkPtr(17), BlkPtr(16), &bSh[8] );
-	if( ntop ) deblock_c4(dbp,  0, 1, BlkPtr(16), AbvPtr(4) , &bSv[0] ); 
-	if( ntop ) deblock_c4(dbp,  1, 1, BlkPtr(17), AbvPtr(5) , &bSv[2] ); 
+	if (alwy) deblock_c4(dbp, 1, 0, BlkPtr(17), BlkPtr(16), &bSh[8]);
+	if (ntop) deblock_c4(dbp, 0, 1, BlkPtr(16), AbvPtr(4), &bSv[0]);
+	if (ntop) deblock_c4(dbp, 1, 1, BlkPtr(17), AbvPtr(5), &bSv[2]);
 	if (ntop) WriteBlkC(recon_cb, 0, -1, AbvPtr(4));
 	if (ntop) WriteBlkC(recon_cb, 1, -1, AbvPtr(5));
 
 	// 18
-	if( nlef ) deblock_c4(dbp,  2, 0, BlkPtr(18), LefPtr(19), &bSh[2] ); 
+	if (nlef) deblock_c4(dbp, 2, 0, BlkPtr(18), LefPtr(19), &bSh[2]);
 	if (nlbp) WriteBlkC(recon_cb, -1, 1, LefPtr(19));
-	if (nlef) CopyBlk(AlePtr(5), LefPtr(19)); 
+	if (nlef) CopyBlk(AlePtr(5), LefPtr(19));
 
 	// 19
-	if( alwy ) deblock_c4(dbp,  3, 0, BlkPtr(19), BlkPtr(18), &bSh[10]);
-	if( alwy ) deblock_c4(dbp,  2, 1, BlkPtr(18), BlkPtr(16), &bSv[8] );
-	if( alwy ) deblock_c4(dbp,  3, 1, BlkPtr(19), BlkPtr(17), &bSv[10]);
+	if (alwy) deblock_c4(dbp, 3, 0, BlkPtr(19), BlkPtr(18), &bSh[10]);
+	if (alwy) deblock_c4(dbp, 2, 1, BlkPtr(18), BlkPtr(16), &bSv[8]);
+	if (alwy) deblock_c4(dbp, 3, 1, BlkPtr(19), BlkPtr(17), &bSv[10]);
 	if (alwy) WriteBlkC(recon_cb, 0, 0, BlkPtr(16));
 	if (rpic) WriteBlkC(recon_cb, 1, 0, BlkPtr(17));
 	if (bpic) WriteBlkC(recon_cb, 0, 1, BlkPtr(18));
 	if (brcn) WriteBlkC(recon_cb, 1, 1, BlkPtr(19));
-	if (alwy) CopyBlk(AbvPtr(4), BlkPtr(18)); 
-	if (rpic) CopyBlk(AbvPtr(5), BlkPtr(19)); 
+	if (alwy) CopyBlk(AbvPtr(4), BlkPtr(18));
+	if (rpic) CopyBlk(AbvPtr(5), BlkPtr(19));
 
 	// 20
-	if( nlef ) deblock_c4(dbp,  0, 0, BlkPtr(20), LefPtr(21), &bSh[0] ); 
+	if (nlef) deblock_c4(dbp, 0, 0, BlkPtr(20), LefPtr(21), &bSh[0]);
 	if (nlef) WriteBlkC(recon_cr, -1, 0, LefPtr(21));
 
 	// 21
-	if( alwy ) deblock_c4(dbp,  1, 0, BlkPtr(21), BlkPtr(20), &bSh[8] );
-	if( ntop ) deblock_c4(dbp,  0, 1, BlkPtr(20), AbvPtr(6) , &bSv[0] );  
-	if( ntop ) deblock_c4(dbp,  1, 1, BlkPtr(21), AbvPtr(7) , &bSv[2] ); 
+	if (alwy) deblock_c4(dbp, 1, 0, BlkPtr(21), BlkPtr(20), &bSh[8]);
+	if (ntop) deblock_c4(dbp, 0, 1, BlkPtr(20), AbvPtr(6), &bSv[0]);
+	if (ntop) deblock_c4(dbp, 1, 1, BlkPtr(21), AbvPtr(7), &bSv[2]);
 	if (ntop) WriteBlkC(recon_cr, 0, -1, AbvPtr(6));
 	if (ntop) WriteBlkC(recon_cr, 1, -1, AbvPtr(7));
 
 	// 22
-	if( nlef ) deblock_c4(dbp,  2, 0, BlkPtr(22), LefPtr(23), &bSh[2] ); 
+	if (nlef) deblock_c4(dbp, 2, 0, BlkPtr(22), LefPtr(23), &bSh[2]);
 	if (nlbp) WriteBlkC(recon_cr, -1, 1, LefPtr(23));
-	if (nlef) CopyBlk(AlePtr(7), LefPtr(23)); 
+	if (nlef) CopyBlk(AlePtr(7), LefPtr(23));
 
 	// 23
-	if( alwy ) deblock_c4(dbp,  3, 0, BlkPtr(23), BlkPtr(22), &bSh[10]);
-	if( alwy ) deblock_c4(dbp,  2, 1, BlkPtr(22), BlkPtr(20), &bSv[8] );
-	if( alwy ) deblock_c4(dbp,  3, 1, BlkPtr(23), BlkPtr(21), &bSv[10]);
+	if (alwy) deblock_c4(dbp, 3, 0, BlkPtr(23), BlkPtr(22), &bSh[10]);
+	if (alwy) deblock_c4(dbp, 2, 1, BlkPtr(22), BlkPtr(20), &bSv[8]);
+	if (alwy) deblock_c4(dbp, 3, 1, BlkPtr(23), BlkPtr(21), &bSv[10]);
 	if (alwy) WriteBlkC(recon_cr, 0, 0, BlkPtr(20));
 	if (rpic) WriteBlkC(recon_cr, 1, 0, BlkPtr(21));
 	if (bpic) WriteBlkC(recon_cr, 0, 1, BlkPtr(22));
 	if (brcn) WriteBlkC(recon_cr, 1, 1, BlkPtr(23));
-	if (alwy) CopyBlk(AbvPtr(6), BlkPtr(22)); 
-	if (rpic) CopyBlk(AbvPtr(7), BlkPtr(23)); 
+	if (alwy) CopyBlk(AbvPtr(6), BlkPtr(22));
+	if (rpic) CopyBlk(AbvPtr(7), BlkPtr(23));
 }
 
 
