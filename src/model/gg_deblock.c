@@ -283,9 +283,13 @@ void gg_deblock_mb(DeblockCtx* dbp, int mbx, int mby, char *recon_y, char *recon
 		}
 	}
 
-	// Call gg_deblock4x4 with parameters (filter all possible edges, up to 3 (lef-cur, ale-lef, abv-cur))
-	//                  CUR         ABV         LEF         ALE
 	int bSh[16], bSv[16]; // bS's calculated during luma in spec order, and read by chroma processing
+
+	//////////////////////////////////////////////////////////////
+	//
+	//             D E B L O C K _ A _ M A C R O B L O C K
+	//
+	//////////////////////////////////////////////////////////////
 
 	// Y Horiz
 	if (mbx) {
@@ -369,25 +373,35 @@ void gg_deblock_mb(DeblockCtx* dbp, int mbx, int mby, char *recon_y, char *recon
 	deblock_c4(dbp, 2, 1, BlkPtr(22), BlkPtr(20), &bSv[8]);
 	deblock_c4(dbp, 3, 1, BlkPtr(23), BlkPtr(21), &bSv[10]);
 
+	/////////////////////////////
+	// Write Recon Blocks
+	/////////////////////////////
 
-	// Writeback blocks
-	// Y
-	if (mby) {
-		WriteBlkY(recon_y, 0, -1, AbvPtr(0));
-		WriteBlkY(recon_y, 1, -1, AbvPtr(1));
-		WriteBlkY(recon_y, 2, -1, AbvPtr(2));
-		WriteBlkY(recon_y, 3, -1, AbvPtr(3));
+	if (mby) { // not Top Pic Edge
+		WriteBlkY(recon_y , 0, -1, AbvPtr(0));
+		WriteBlkY(recon_y , 1, -1, AbvPtr(1));
+		WriteBlkY(recon_y , 2, -1, AbvPtr(2));
+		WriteBlkY(recon_y , 3, -1, AbvPtr(3));
+		WriteBlkC(recon_cb, 0, -1, AbvPtr(4));
+		WriteBlkC(recon_cb, 1, -1, AbvPtr(5));
+		WriteBlkC(recon_cr, 0, -1, AbvPtr(6));
+		WriteBlkC(recon_cr, 1, -1, AbvPtr(7));
 	}
 
-	if (mbx) {
-		WriteBlkY(recon_y, -1, 0, LefPtr(5));
-		WriteBlkY(recon_y, -1, 1, LefPtr(7));
-		WriteBlkY(recon_y, -1, 2, LefPtr(13));
+	if (mbx) { // not Left Pic Edge
+		WriteBlkY(recon_y , -1, 0, LefPtr(5));
+		WriteBlkY(recon_y , -1, 1, LefPtr(7));
+		WriteBlkY(recon_y , -1, 2, LefPtr(13));
+		WriteBlkC(recon_cb, -1, 0, LefPtr(17));
+		WriteBlkC(recon_cr, -1, 0, LefPtr(21));
 	}
 
-	WriteBlkY(recon_y, 0, 0, BlkPtr(0));
-	WriteBlkY(recon_y, 0, 1, BlkPtr(2));
-	WriteBlkY(recon_y, 0, 2, BlkPtr(8));
+	// Inside Pic
+	WriteBlkY(recon_y , 0, 0, BlkPtr(0));
+	WriteBlkY(recon_y , 0, 1, BlkPtr(2));
+	WriteBlkY(recon_y , 0, 2, BlkPtr(8));
+	WriteBlkC(recon_cb, 0, 0, BlkPtr(16));
+	WriteBlkC(recon_cr, 0, 0, BlkPtr(20));
 
 	WriteBlkY(recon_y, 1, 0, BlkPtr(1));
 	WriteBlkY(recon_y, 1, 1, BlkPtr(3));
@@ -397,80 +411,54 @@ void gg_deblock_mb(DeblockCtx* dbp, int mbx, int mby, char *recon_y, char *recon
 	WriteBlkY(recon_y, 2, 1, BlkPtr(6));
 	WriteBlkY(recon_y, 2, 2, BlkPtr(12));
 
-	if (mbx == dbp->mb_width - 1) {
-		WriteBlkY(recon_y, 3, 0, BlkPtr(5));
-		WriteBlkY(recon_y, 3, 1, BlkPtr(7));
-		WriteBlkY(recon_y, 3, 2, BlkPtr(13));
-	}
-
-	if (mby == dbp->mb_height - 1) {
-		if (mbx) {
-			WriteBlkY(recon_y, -1, 3, LefPtr(15));
-		}
-		WriteBlkY(recon_y, 0, 3, BlkPtr(10));
-		WriteBlkY(recon_y, 1, 3, BlkPtr(11));
-		WriteBlkY(recon_y, 2, 3, BlkPtr(14));
-	}
-
-	if (mby == dbp->mb_height - 1 && mbx == dbp->mb_width - 1) {
-		WriteBlkY(recon_y, 3, 3, BlkPtr(15));
-	}
-
-	// Copy bottom row to above data
-	if (mbx) {
-		CopyBlk(AlePtr(3), LefPtr(15));
-	}
-	CopyBlk(AbvPtr(0), BlkPtr(10));
-	CopyBlk(AbvPtr(1), BlkPtr(11));
-	CopyBlk(AbvPtr(2), BlkPtr(14));
-	if (mbx == dbp->mb_width - 1) {
-		CopyBlk(AbvPtr(3), BlkPtr(15));
-	}
-
-
-	// Writeback Blocks Chroma
-
-	if (mby) {
-		WriteBlkC(recon_cb, 0, -1, AbvPtr(4));
-		WriteBlkC(recon_cb, 1, -1, AbvPtr(5));
-		WriteBlkC(recon_cr, 0, -1, AbvPtr(6));
-		WriteBlkC(recon_cr, 1, -1, AbvPtr(7));
-	}
-
-	if (mbx) {
-		WriteBlkC(recon_cb, -1, 0, LefPtr(17));
-		WriteBlkC(recon_cr, -1, 0, LefPtr(21));
-	}
-
-	WriteBlkC(recon_cb, 0, 0, BlkPtr(16));
-	WriteBlkC(recon_cr, 0, 0, BlkPtr(20));
-
-	if (mbx == dbp->mb_width - 1) {
+	if (mbx == dbp->mb_width - 1) { // Right Pic Edge
+		WriteBlkY(recon_y , 3, 0, BlkPtr(5));
+		WriteBlkY(recon_y , 3, 1, BlkPtr(7));
+		WriteBlkY(recon_y , 3, 2, BlkPtr(13));
 		WriteBlkC(recon_cb, 1, 0, BlkPtr(17));
 		WriteBlkC(recon_cr, 1, 0, BlkPtr(21));
 	}
-	if (mby == dbp->mb_height - 1) {
-		if (mbx) {
-			WriteBlkC(recon_cb, -1, 1, LefPtr(19));
-			WriteBlkC(recon_cr, -1, 1, LefPtr(23));
-		}
+
+	if (mby == dbp->mb_height - 1) { // Bottom Pic Edge
+		WriteBlkY(recon_y , 0, 3, BlkPtr(10));
+		WriteBlkY(recon_y , 1, 3, BlkPtr(11));
+		WriteBlkY(recon_y , 2, 3, BlkPtr(14));
 		WriteBlkC(recon_cb, 0, 1, BlkPtr(18));
 		WriteBlkC(recon_cr, 0, 1, BlkPtr(22));
 	}
-	if (mby == dbp->mb_height - 1 && mbx == dbp->mb_width - 1) {
+
+	if (mby == dbp->mb_height - 1 && mbx) { // not Left of Bottom Edge
+		WriteBlkY(recon_y , -1, 3, LefPtr(15));
+		WriteBlkC(recon_cb, -1, 1, LefPtr(19));
+		WriteBlkC(recon_cr, -1, 1, LefPtr(23));
+	}
+
+	if (mby == dbp->mb_height - 1 && mbx == dbp->mb_width - 1) { // Bottom Right Pic Corner
+		WriteBlkY(recon_y, 3, 3, BlkPtr(15));
 		WriteBlkC(recon_cb, 1, 1, BlkPtr(19));
 		WriteBlkC(recon_cr, 1, 1, BlkPtr(23));
 	}
 
+	/////////////////////////////
+	// Copy partials to Abv buf
+	/////////////////////////////
+
 	if (mbx) {
-		CopyBlk(AlePtr(5), LefPtr(19));
-		CopyBlk(AlePtr(7), LefPtr(23));
+		CopyBlk(AlePtr(3), LefPtr(15)); // Y
+		CopyBlk(AlePtr(5), LefPtr(19)); // Cb
+		CopyBlk(AlePtr(7), LefPtr(23)); // Cr
 	}
-	CopyBlk(AbvPtr(4), BlkPtr(18));
-	CopyBlk(AbvPtr(6), BlkPtr(22));
+
+	CopyBlk(AbvPtr(0), BlkPtr(10)); // Y 10
+	CopyBlk(AbvPtr(1), BlkPtr(11)); // Y 11
+	CopyBlk(AbvPtr(2), BlkPtr(14)); // Y 14
+	CopyBlk(AbvPtr(4), BlkPtr(18)); // Cb 2
+	CopyBlk(AbvPtr(6), BlkPtr(22)); // Cr 2
+
 	if (mbx == dbp->mb_width - 1) {
-		CopyBlk(AbvPtr(5), BlkPtr(19));
-		CopyBlk(AbvPtr(7), BlkPtr(23));
+		CopyBlk(AbvPtr(3), BlkPtr(15)); // Y
+		CopyBlk(AbvPtr(5), BlkPtr(19)); // Cb
+		CopyBlk(AbvPtr(7), BlkPtr(23)); // Cr
 	}
 }
 
