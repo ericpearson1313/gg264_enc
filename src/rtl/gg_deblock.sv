@@ -50,6 +50,7 @@ module gg_deblock_process
     input  logic [9:0] mvy, // -128.00 to 127.75
 
     // Block info and recon data
+    input  logic       valid,  // indicates valid input blk
     input  logic [2:0] cidx, // cidx={0-luma, 1-acluma, 2-cb, 3-cr, 4-dccb, 5-dccr, 6-dcy}
     input  logic [3:0] bidx, // block IDX in h264 order
     input  logic [4:0] num_coeff, // Count of non-zero block coeffs
@@ -69,27 +70,46 @@ module gg_deblock_process
     );
     
     // Flags
-	logic dc_flag = ( cidx[2:0] == 4 || cidx[2:0] == 5 || cidx[2:0] == 6) ? 1'b1 : 1'b0;
-	logic ac_flag = ( cidx[2:0] == 1 || cidx[2:0] == 2 || cidx[2:0] == 3) ? 1'b1 : 1'b0;
-	logic ch_flag = ( cidx[2:0] == 2 || cidx[2:0] == 3 || cidx[2:0] == 4 || cidx[2:0] == 5) ? 1'b1 : 1'b0;    
-	logic cb_flag = ( cidx[2:0] == 2 || cidx[2:0] == 4 ) ? 1'b1 : 1'b0;
-	logic cr_flag = ( cidx[2:0] == 3 || cidx[2:0] == 5 ) ? 1'b1 : 1'b0;
-	logic y_flag  = ( cidx[2:0] == 0 || cidx[2:0] == 1 || cidx[2:0] == 6 ) ? 1'b1 : 1'b0;
+    logic dc_flag;
+	logic ac_flag;
+	logic ch_flag;
+	logic cb_flag;
+	logic cr_flag;
+	logic y_flag ;
 
-    logic [1:0] blkx = { bidx[2], bidx[0] };
-    logic [1:0] blky = { bidx[3], bidx[1] };
-    logic last_blk  = ( cidx[2:0] == 3 && bidx[1:0] == 3 ) ? 1'b0 : 1'b1;
+	assign dc_flag = ( cidx[2:0] == 4 || cidx[2:0] == 5 || cidx[2:0] == 6) ? 1'b1 : 1'b0;
+	assign ac_flag = ( cidx[2:0] == 1 || cidx[2:0] == 2 || cidx[2:0] == 3) ? 1'b1 : 1'b0;
+	assign ch_flag = ( cidx[2:0] == 2 || cidx[2:0] == 3 || cidx[2:0] == 4 || cidx[2:0] == 5) ? 1'b1 : 1'b0;    
+	assign cb_flag = ( cidx[2:0] == 2 || cidx[2:0] == 4 ) ? 1'b1 : 1'b0;
+	assign cr_flag = ( cidx[2:0] == 3 || cidx[2:0] == 5 ) ? 1'b1 : 1'b0;
+	assign y_flag  = ( cidx[2:0] == 0 || cidx[2:0] == 1 || cidx[2:0] == 6 ) ? 1'b1 : 1'b0;
+
+    logic [1:0] blkx;
+    logic [1:0] blky;
+    logic last_blk  ;
+
+    assign blkx      = { bidx[2], bidx[0] };
+    assign blky      = { bidx[3], bidx[1] };
+    assign last_blk  = ( cidx[2:0] == 3 && bidx[1:0] == 3 ) ? valid : 1'b0;
 
     logic [0:15][7:0] cur_recon, lef_recon, abv_recon, ale_recon;
     
     // Positional strobes   
-    logic ntop = ( mby != 0 ) ? 1'b1 : 1'b0; // not top pic mb row                                        
-    logic nlef = ( mbx != 0 ) ? 1'b1 : 1'b0;  // not left pic mb col                                      
-    logic rpic = ( mbx == mb_width ) ? 1'b1 : 1'b0; // right picture edge                             
-    logic bpic = ( mby == mb_height ) ? 1'b1 : 1'b0; // Bottom picture edge                           
-    logic nlbp = ( mby == mb_height && mbx != 0 ) ? 1'b1 : 1'b0;  // Bottom pic edge, but not left corner 
-    logic brcn = ( mbx == mb_width && mby == mb_height ) ? 1'b1 : 1'b0;  // bottom right corner       
-    logic alwy = 1'b1;                                                                                
+    logic ntop;
+    logic nlef;
+    logic rpic;
+    logic bpic;
+    logic nlbp;
+    logic brcn;
+    logic alwy;
+
+    assign ntop = ( mby != 0 ) ? valid : 1'b0; // not top pic mb row                                        
+    assign nlef = ( mbx != 0 ) ? valid : 1'b0;  // not left pic mb col                                      
+    assign rpic = ( mbx == mb_width ) ? valid : 1'b0; // right picture edge                             
+    assign bpic = ( mby == mb_height ) ? valid : 1'b0; // Bottom picture edge                           
+    assign nlbp = ( mby == mb_height && mbx != 0 ) ? valid : 1'b0;  // Bottom pic edge, but not left corner 
+    assign brcn = ( mbx == mb_width && mby == mb_height ) ? valid : 1'b0;  // bottom right corner       
+    assign alwy = valid;                                                                                
 
     // current blk context
     logic [5:0] lef_qpz   , ale_qpz   , abv_qpz   , cur_qpz;
@@ -101,7 +121,6 @@ module gg_deblock_process
     
     // Calc cur blk info from input
     assign cur_qpz = ( mbtype == 1 ) ? 6'd0 : qpy;
-    assign cur_nz = ( num_coeff != 0 ) ? 1'b1 : 1'b0;
     assign cur_mbtype = mbtype;
     assign cur_refidx = refidx;
     assign cur_mvx = mvx;
@@ -190,8 +209,8 @@ module gg_deblock_process
         end
         else if( ch_flag ) begin // chroma
             if( blkx == 1 ) begin
-                abvblk_mem_addr[0] = { mbx[5:0], cr_flag, 1'b1 };
-                abvblk_mem_addr[1] = { mbx[5:0], cr_flag, 1'b1 };
+                abvblk_mem_addr[0] = { mbx[5:0], 1'b1, cr_flag };
+                abvblk_mem_addr[1] = { mbx[5:0], 1'b1, cr_flag };
                 { above_ale_nz, above_ale_blk } = abvblk_mem_dout[0];
                 { above_abv_nz, above_abv_blk } = abvblk_mem_dout[1];
                 abvblk_mem_din[0] = { lef_nz, lef_filt };
@@ -199,8 +218,8 @@ module gg_deblock_process
                 abvblk_mem_we[0] = above_ale_we;
                 abvblk_mem_we[1] = above_abv_we;
             end else begin // blkx = 0;
-                abvblk_mem_addr[0] = { mbx[5:0]     , cr_flag, 1'b0 };
-                abvblk_mem_addr[1] = { mbx[5:0] - 1 , cr_flag, 1'b0 };
+                abvblk_mem_addr[0] = { mbx[5:0]     , 1'b1 ,cr_flag };
+                abvblk_mem_addr[1] = { mbx[5:0] - 1 , 1'b1 ,cr_flag };
                 { above_ale_nz, above_ale_blk } = abvblk_mem_dout[1];
                 { above_abv_nz, above_abv_blk } = abvblk_mem_dout[0];
                 abvblk_mem_din[1] = { lef_nz, lef_filt };
@@ -227,63 +246,48 @@ module gg_deblock_process
     logic [9:0] lef_mb_mvy   , ale_mb_mvy   , abv_mb_mvy   ; 
     
     // memory interface
-    logic        abvmb_mem_we[2];
-    logic [5:0]  abvmb_mem_raddr[2];
-    logic [5:0]  abvmb_mem_waddr[2];
-    logic [31:0] abvmb_mem_din[2];
-    logic [31:0] abvmb_mem_dout[2];
+    logic        abvmb_mem_we;
+    logic [6:0]  abvmb_mem_addr;
+    logic [31:0] abvmb_mem_din;
+    logic [31:0] abvmb_mem_dout;
 
-    generate
-        for( ii = 0; ii < 2; ii++ ) begin
-            db_sram_1r1w_async #( 64, 6, 32 ) _above_mb_ram
-            (
-                 .clk      ( clk ),
-                 .we       ( abvmb_mem_we[ii]    ),
-                 .raddr    ( abvmb_mem_raddr[ii] ),
-                 .waddr    ( abvmb_mem_waddr[ii] ),
-                 .din      ( abvmb_mem_din[ii]  ),
-                 .dout     ( abvmb_mem_dout[ii]  )
-             );
-        end
-    endgenerate
-    
+    db_sram_1r1w_async #( 128, 7, 32 ) _above_mb_ram
+    (
+         .clk      ( clk ),
+         .we       ( abvmb_mem_we    ),
+         .raddr    ( abvmb_mem_addr ),
+         .waddr    ( abvmb_mem_addr ),
+         .din      ( abvmb_mem_din   ),
+         .dout     ( abvmb_mem_dout  )
+     );
+
     // Hold the left, prev macroblock info, update at end of last block
     // { [5:0] qpy, [1:0] mbtype, [3:0] refidx, [9:0] mvx, [9:0] mvy } = 32 bits
     always_ff @(posedge clk) begin : _lef_mb_info_regs
         if( last_blk ) begin
+            // left <- cur
             lef_mb_qpz      <= cur_qpz;
             lef_mb_mbtype   <= cur_mbtype;
             lef_mb_refidx   <= cur_refidx;
             lef_mb_mvx      <= cur_mvx;
-            lef_mb_mvy      <= cur_mvy;
+            lef_mb_mvy      <= cur_mvy;     
+            // ale <- abv   
+            ale_mb_qpz      <= abv_mb_qpz;
+            ale_mb_mbtype   <= abv_mb_mbtype;
+            ale_mb_refidx   <= abv_mb_refidx;
+            ale_mb_mvx      <= abv_mb_mvx;
+            ale_mb_mvy      <= abv_mb_mvy;      
         end
     end
 
     // Wire the current MB info to above at end of last block
-    always_comb begin : _abv_mb_ram_write
+    always_comb begin : _abv_mb_ram
         // write: cur MB data to above at last block
-        abvmb_mem_we[0]  = last_blk & !mbx[0];
-        abvmb_mem_we[1]  = last_blk &  mbx[0];
-        abvmb_mem_din[0] = { cur_qpz[5:0], cur_mbtype[1:0], cur_refidx[3:0], cur_mvx[9:0], cur_mvy[9:0] };
-        abvmb_mem_din[1] = { cur_qpz[5:0], cur_mbtype[1:0], cur_refidx[3:0], cur_mvx[9:0], cur_mvy[9:0] };
-        abvmb_mem_waddr[0] = mbx[6:1];
-        abvmb_mem_waddr[1] = mbx[6:1];
-    end
-    
-    always_comb begin : _abv_ram_read
-        // Read: read and demux above_ale_info, above_abv_info, relative to current blk
-        // The read addresses for above and left may differ, and need to be sent to appropriate port
-        if( mbx[0] ) begin
-            abvmb_mem_raddr[0] = mbx[7:1];
-            abvmb_mem_raddr[1] = mbx[7:1];
-            { ale_mb_qpz, ale_mb_mbtype, ale_mb_refidx, ale_mb_mvx, ale_mb_mvy } =  abvmb_mem_dout[0];
-            { abv_mb_qpz, abv_mb_mbtype, abv_mb_refidx, abv_mb_mvx, abv_mb_mvy } =  abvmb_mem_dout[1];
-        end else begin
-            abvmb_mem_raddr[0] = mbx[7:1];
-            abvmb_mem_raddr[1] = mbx[7:1] - 1;
-            { ale_mb_qpz, ale_mb_mbtype, ale_mb_refidx, ale_mb_mvx, ale_mb_mvy } =  abvmb_mem_dout[1];
-            { abv_mb_qpz, abv_mb_mbtype, abv_mb_refidx, abv_mb_mvx, abv_mb_mvy } =  abvmb_mem_dout[0];
-        end
+        abvmb_mem_we  = last_blk;
+        abvmb_mem_din = { cur_qpz[5:0], cur_mbtype[1:0], cur_refidx[3:0], cur_mvx[9:0], cur_mvy[9:0] };
+        abvmb_mem_addr = mbx[6:0];
+        { abv_mb_qpz, abv_mb_mbtype, abv_mb_refidx, abv_mb_mvx, abv_mb_mvy } =  abvmb_mem_dout;
+
     end
     
     // combine lef and above MB and select current block neighbour info.
@@ -321,7 +325,7 @@ module gg_deblock_process
     logic [128:0] prevblk_mem_dout[4];
     
     generate
-        for( ii = 0; ii < 2; ii++ ) begin
+        for( ii = 0; ii < 4; ii++ ) begin
             db_sram_1r1w_async #( 16, 4, 129 ) _prev_blk_ram
             (
                  .clk      ( clk ),
@@ -334,11 +338,6 @@ module gg_deblock_process
         end
     endgenerate
     
-    // prev mem write enable, always write except at boundary
-    logic       lef_blk_we = nlef;
-    logic       ale_blk_we = nlef | ntop;
-    logic       abv_blk_we = ntop;
-    logic       cur_blk_we = alwy;
     
     // Toggle - toggle the pmem bank for each macroblock
     reg toggle;
@@ -352,10 +351,10 @@ module gg_deblock_process
 
     logic [128:0] pm0, pm1, pm2, pm3;
     always_comb begin : _pmem_input_mux
-        pm0 = ( !bidx[0] ) ? { abv_nz, abv_filt } : { ale_nz, ale_filt };
-        pm1 = ( !bidx[0] ) ? { ale_nz, ale_filt } : { abv_nz, abv_filt };
-        pm2 = ( !bidx[0] ) ? { cur_nz, cur_filt } : { lef_nz, lef_filt };
-        pm3 = ( !bidx[0] ) ? { lef_nz, lef_filt } : { cur_nz, cur_filt };
+        pm0 = ( bidx[0] ) ? { lef_nz, lef_filt } : { cur_nz, cur_filt };
+        pm1 = ( bidx[0] ) ? { cur_nz, cur_filt } : { lef_nz, lef_filt };
+        pm2 = ( bidx[0] ) ? { ale_nz, ale_filt } : { abv_nz, abv_filt };
+        pm3 = ( bidx[0] ) ? { abv_nz, abv_filt } : { ale_nz, ale_filt };
         prevblk_mem_din[0] = ( bidx[1] ) ? pm2 : pm0;
         prevblk_mem_din[1] = ( bidx[1] ) ? pm3 : pm1;
         prevblk_mem_din[2] = ( bidx[1] ) ? pm0 : pm2;
@@ -365,10 +364,10 @@ module gg_deblock_process
     // filter input muxing
     logic [128:0] fm0, fm1, fm2, fm3;
     always_comb begin : _filter_input_mux
-        fm0 = ( !bidx[0] ) ? prevblk_mem_dout[1] : prevblk_mem_dout[0];
-        fm1 = ( !bidx[0] ) ? prevblk_mem_dout[0] : prevblk_mem_dout[1];
-        fm2 = ( !bidx[0] ) ? prevblk_mem_dout[3] : prevblk_mem_dout[2];
-        fm3 = ( !bidx[0] ) ? prevblk_mem_dout[2] : prevblk_mem_dout[3];
+        fm0 = ( bidx[0] ) ? prevblk_mem_dout[2] : prevblk_mem_dout[3];
+        fm1 = ( bidx[0] ) ? prevblk_mem_dout[3] : prevblk_mem_dout[2];
+        fm2 = ( bidx[0] ) ? prevblk_mem_dout[0] : prevblk_mem_dout[1];
+        fm3 = ( bidx[0] ) ? prevblk_mem_dout[1] : prevblk_mem_dout[0];
         { ale_nz, ale_recon } = ( blky == 0 ) ? { above_ale_nz, above_ale_blk } : ( bidx[1] ) ? fm2 : fm0;
         { abv_nz, abv_recon } = ( blky == 0 ) ? { above_abv_nz, above_abv_blk } : ( bidx[1] ) ? fm3 : fm1;
         { lef_nz, lef_recon } = ( bidx[1] ) ? fm0 : fm2;
@@ -377,19 +376,25 @@ module gg_deblock_process
 
     // Addr - pmem addressing - lookup table
     logic [0:23][0:3][3:0] amux = { 
-        64'h0900_0000_0909_0000,
-        64'h1000_1100_1010_1111,
+        64'h09FF_00FF_0909_0000,
+        64'h10FF_11FF_1010_1111,
         64'h2B09_2200_2B2B_2222,
         64'h3210_3311_3232_3333,
-        64'h4C00_4400_4C4C_4444,
-        64'h5D00_5500_5D5D_5555 };
-    logic bptr; // 0 to 23
+        64'h4CFF_44FF_4C4C_4444,
+        64'h5DFF_55FF_5D5D_5555 };
+    logic [4:0] bptr; // 0 to 23
     always_comb begin : _pmem_addressing
-            bptr = { ( cb_flag ) ? 2'b01 : ( cr_flag ) ? 2'b10 : 2'b00, bidx[3:0] };
+            bptr = ( cb_flag ) ? { 3'b100, bidx[1:0] } : ( cr_flag ) ? { 3'b101, bidx[1:0] } : { 1'b0, bidx[3:0] };
             prevblk_mem_addr[0] = { toggle ^ amux[bptr][0][3], amux[bptr][0][2:0] };
             prevblk_mem_addr[1] = { toggle ^ amux[bptr][1][3], amux[bptr][1][2:0] };
             prevblk_mem_addr[2] = { toggle ^ amux[bptr][2][3], amux[bptr][2][2:0] };
             prevblk_mem_addr[3] = { toggle ^ amux[bptr][3][3], amux[bptr][3][2:0] };
+            // prev mem write enable, always write except at boundary
+            prevblk_mem_we[0] = ( amux[bptr][0] != 4'd15 ) ? alwy : 1'b0; //nlef;
+            prevblk_mem_we[1] = ( amux[bptr][1] != 4'd15 ) ? alwy : 1'b0; //nlef | ntop;
+            prevblk_mem_we[2] = ( amux[bptr][2] != 4'd15 ) ? alwy : 1'b0; //ntop;
+            prevblk_mem_we[3] = ( amux[bptr][3] != 4'd15 ) ? alwy : 1'b0;
+
     end
     
     //////////////////////////////////////////////////////////////////////////////////////////////////    
@@ -515,7 +520,7 @@ module gg_deblock_process
         cur_valid = 0;
         // calculate output block valids based on cidx, bidx    
         if( disable_deblock_filter_idc == 2'd1 ) begin
-            cur_valid = 1;
+            cur_valid = alwy;
         end else begin
             unique case( { cidx, bidx } ) 
             { 3'd0, 4'h0 } : begin lef_valid = nlef; end
@@ -635,14 +640,14 @@ module gg_deblock_filter
     );     
 
     // Intermediate nodes
-    logic [0:3][7:0] cur_blk;
-    logic [0:3][7:0] lef_blk;
+    logic [0:15][7:0] cur_blk;
+    logic [0:15][7:0] lef_blk;
     
     // calc alpha, beta deblock thresholds 
     
     logic [0:2][7:0] alpha;
     logic [0:2][7:0] beta;
-    logic [0:2][0:1][5:0] tc0;
+    logic [0:2][0:1][4:0] tc0;
     logic [0:2][0:1][1:0] bsidx;
         
     logic [5:0] qpavg[2:0];
@@ -711,8 +716,8 @@ module gg_deblock_filter
             beta[ii][7:0]  = beta_table[indexB[ii]];
             bsidx[ii][0][1:0] = (bs[ii]==2)?2'd1:(bs[ii][0]==3)?2'd2:2'd0;
             bsidx[ii][1][1:0] = (bs[ii]==2)?2'd1:(bs[ii][1]==3)?2'd2:2'd0; // different for chroma
-            tc0[ii][0][5:0]   = tc0_table[bsidx[ii][0]][indexA[ii]];
-            tc0[ii][1][5:0]   = tc0_table[bsidx[ii][1]][indexA[ii]];
+            tc0[ii][0][4:0]   = tc0_table[bsidx[ii][0]][indexA[ii]];
+            tc0[ii][1][4:0]   = tc0_table[bsidx[ii][1]][indexA[ii]];
          end
     end
     
@@ -724,10 +729,10 @@ module gg_deblock_filter
             gg_deblock_filter_1x8 _filt0 ( 
                 .clk        ( clk      ),
                 .ch_flag    ( ch_flag  ),
-                .bs         ( ( ii < 2 ) ? bs[0][0] : bs[0][1] ),
+                .bs         ( 0 ),//( ii < 2 ) ? bs[0][0] : bs[0][1] ),
                 .alpha      ( alpha[0] ),
                 .beta       ( beta[0]  ),
-                .tc0        ( ( ii < 2 ) ? tc0[0][0] : tc0[1][0] ),
+                .tc0        ( ( ii < 2 ) ? tc0[0][0] : tc0[0][1] ),
                 .qi         ( { blki[3][0+4*ii], blki[3][1+4*ii], blki[3][2+4*ii], blki[3][3+4*ii] } ),
                 .pi         ( { blki[2][3+4*ii], blki[2][2+4*ii], blki[2][1+4*ii], blki[2][0+4*ii] } ),
                 .qo         ( { cur_blk[0+4*ii], cur_blk[1+4*ii], cur_blk[2+4*ii], cur_blk[3+4*ii] } ),
@@ -740,10 +745,10 @@ module gg_deblock_filter
             gg_deblock_filter_1x8 _filt1 ( 
                 .clk        ( clk      ),
                 .ch_flag    ( ch_flag  ),
-                .bs         ( ( ii < 2 ) ? bs[1][0] : bs[1][1] ),
+                .bs         ( 0 ),//( ii < 2 ) ? bs[1][0] : bs[1][1] ),
                 .alpha      ( alpha[1] ),
                 .beta       ( beta[1]  ),
-                .tc0        ( ( ii < 2 ) ? tc0[0][1] : tc0[1][1] ),
+                .tc0        ( ( ii < 2 ) ? tc0[1][0] : tc0[1][1] ),
                 .qi         ( { lef_blk[0*4+ii], lef_blk[1*4+ii], lef_blk[2*4+ii], lef_blk[3*4+ii] } ),
                 .pi         ( { blki[0][3*4+ii], blki[0][2*4+ii], blki[0][1*4+ii], blki[0][0*4+ii] } ),
                 .qo         ( { blko[2][0*4+ii], blko[2][1*4+ii], blko[2][2*4+ii], blko[2][3*4+ii] } ),
@@ -756,10 +761,10 @@ module gg_deblock_filter
             gg_deblock_filter_1x8 _filt2 ( 
                 .clk        ( clk      ),
                 .ch_flag    ( ch_flag  ),
-                .bs         ( ( ii < 2 ) ? bs[2][0] : bs[2][1] ),
+                .bs         ( 0 ),//( ii < 2 ) ? bs[2][0] : bs[2][1] ),
                 .alpha      ( alpha[2] ),
                 .beta       ( beta[2]  ),
-                .tc0        ( ( ii < 2 ) ? tc0[0][2] : tc0[1][2] ),
+                .tc0        ( ( ii < 2 ) ? tc0[2][0] : tc0[2][1] ),
                 .qi         ( { cur_blk[0*4+ii], cur_blk[1*4+ii], cur_blk[2*4+ii], cur_blk[3*4+ii] } ),
                 .pi         ( { blki[1][3*4+ii], blki[1][2*4+ii], blki[1][1*4+ii], blki[1][0*4+ii] } ),
                 .qo         ( { blko[3][0*4+ii], blko[3][1*4+ii], blko[3][2*4+ii], blko[3][3*4+ii] } ),
