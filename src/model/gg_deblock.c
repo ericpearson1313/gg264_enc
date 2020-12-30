@@ -283,6 +283,22 @@ void gg_deblock_mb(DeblockCtx* dbp, int mbx, int mby, char *recon_y, char *recon
 		}
 	}
 
+	//printf("Input Recon\n");
+	//for (bidx = 0; bidx < 24; bidx++) {
+	//	printf("128'h");
+	//	for (int ii = 0; ii < 16; ii++) {
+	//		printf("%02X", BlkPtr(bidx)->d[ii]);
+	//	}
+	//	printf("\n");
+	//}
+	//printf("Nz\n");
+	//printf("16'b");
+	//for (bidx = 0; bidx < 24; bidx++) {
+	//	printf("%1d", BlkPtr(bidx)->nz);
+	//}
+	//printf("\n");
+	
+
 	int bSh[16], bSv[16]; // bS's calculated during luma in spec order, and read by chroma processing
 	int ntop = (mby) ? 1 : 0; // not top pic mb row
 	int nlef = (mbx) ? 1 : 0; // not left pic mb col
@@ -446,6 +462,17 @@ void gg_deblock_mb(DeblockCtx* dbp, int mbx, int mby, char *recon_y, char *recon
 	if (brcn) WriteBlkC(recon_cr, 1, 1, BlkPtr(23));
 	if (alwy) CopyBlk(AbvPtr(6), BlkPtr(22));
 	if (rpic) CopyBlk(AbvPtr(7), BlkPtr(23));
+
+
+	//printf("Deblocked Recon\n");
+	//for (bidx = 0; bidx < 24; bidx++) {
+	//	printf("128'h");
+	//	for (int ii = 0; ii < 16; ii++) {
+	//		printf("%02X", BlkPtr(bidx)->d[ii]);
+	//	}
+	//	printf("\n");
+	//}
+
 }
 
 

@@ -141,6 +141,70 @@ module gg_deblock_testbench(
     
     
          // testbench decl
+         
+    logic [0:23][0:15][7:0] ref_in, ref_out;
+    logic [0:23] ref_nz;
+    
+    assign ref_nz = 24'b1111_1111_1111_1111_1011_0000;
+    
+    assign ref_in = {
+        128'h2C2C2C2C3D3D3D3D6060606071717171,
+        128'h2C2C2C2C3D3D3D3D6060606071717171,
+        128'h554E525D45404855383746563B3B4E60,
+        128'h6765605E5E5A524E71695A538C837067,
+        128'h322F2A2738352F2D44413B384946413E,
+        128'h22194E8D261B4C892D1E49823120477E,
+        128'h494C5154494C5154494C5154494C5154,
+        128'h524646524C46464C515757515D69695D,
+        128'h2B1331673A27416F473B4F6E453D4D64,
+        128'h9AA0896CA6AC95789AA18A6C83897255,
+        128'h2E1F24392E1F24392E1F24392E1F2439,
+        128'h586161586A73736A7B84847B7B84847B,
+        128'h4F46464F4F46464F4F46464F4F46464F,
+        128'h65615A565E5C5957515356584B4E5559,
+        128'h51515151565656566262626268686868,
+        128'h3D50686E4C6A8D926A9ED7DC79B8FCFF,
+        128'h8A8A8A8A87878787828282827F7F7F7F,
+        128'h80808080808080808080808080808080,
+        128'h7C85857C7C85857C7C85857C7C85857C,
+        128'h7F82878A7F82878A7F82878A7F82878A,
+        128'h82828282828282828282828282828282,
+        128'h82828282828282828282828282828282,
+        128'h82828282828282828282828282828282,
+        128'h82828282828282828282828282828282
+        };
+    assign ref_out = {
+        128'h2C2C2C2C3D3D3D3D6060606071717171,
+        128'h2C2C2D2E3D3D3C3C6060606071717171,
+        128'h554E525D45404855383746563B3B4E60,
+        128'h6765605D5E5A524D71695A538C837067,
+        128'h302F2A2739352F2D44413B384948433E,
+        128'h22194E8D261B4C892D1E49823120477E,
+        128'h4A4A4F54494B50524A4B50524B4A4E52,
+        128'h524646524E47464C535657515D69695D,
+        128'h2B1331673A27416F473B4F6E453D4D64,
+        128'h9AA0896CA6AC95789AA18A6C83897255,
+        128'h2E1F24392E1F24392E1F24392E1F2439,
+        128'h586161586A73736A7B84847B7B84847B,
+        128'h4D4849514E4747504F4747504F48484F,
+        128'h65615A565E5C5957515356584B4E5559,
+        128'h514F4F51565656566262626268686868,
+        128'h3D50686E4C6A8D926A9ED7DC79B8FCFF,
+        128'h8A8A8A8887878785828282817E81817E,
+        128'h82808080828080808180808080818282,
+        128'h7D83837D7C85857C7C85857C7C85857C,
+        128'h7F8185887F82878A7F82878A7F82878A,
+        128'h82828282828282828282828282828282,
+        128'h82828282828282828282828282828282,
+        128'h82828282828282828282828282828282,
+        128'h82828282828282828282828282828282
+    };
+    logic [0:23][7:0] test_idx;
+    logic [0:23] test_ale;
+    int err;
+    
+    assign test_ale =  24'b_0__0__0__1__0__0__1__1__0__1__0__1__1__1__1__1__0__0__0__1__0__0__0__1;
+    assign test_idx = 192'h00_00_00_00_00_00_01_04_00_02_00_08_03_06_09_0C_00_00_00_10_00_00_00_14;
        
     initial begin
         // frame
@@ -206,8 +270,42 @@ module gg_deblock_testbench(
             end
         end
  
-       
-       valid = 0;
+        // Use hard coded data for single macroblock
+        err = 0;
+        
+        qpy = 29;
+        refidx = 1;
+        mvx = 0;
+        mvy = 0;
+        mbx = 0;
+        mby = 0;
+        valid = 1;
+        for( int ii = 0; ii < 24; ii++ ) begin
+            recon = ref_in[ii];
+            num_coeff = ref_nz[ii];
+            cidx = ( ii > 19 ) ? 3 : ( ii > 15 ) ? 2 : 0;
+            bidx[3:0] = ( ii > 19 ) ? ii - 20 : ( ii > 15 ) ? ii - 16 : ii;
+            @(negedge clk);
+            if( ale_valid != test_ale[ii] ) begin
+                $write("ERROR: ale_valid = %d, test_ale[%d] = %d\n", ale_valid, ii, test_ale[ii] );
+                err++;
+            end
+            if( test_ale[ii] && ale_filt != ref_out[test_idx[ii]] ) begin
+                $write("ERROR: ale_filtered mismatch blk[%d]\n", ii );
+                $write("ERROR: ale_filt = %0h\n", ale_filt );
+                $write("ERROR: ref_filt = %0h\n", ref_out[test_idx[ii]] );
+                err++;
+            end
+            @(posedge clk);
+        end 
+        if( err ) begin
+            $write("ERROR: test failed with %d errors\n", err );
+        end else begin
+            $write("PASS: test passed without failures\n" );
+        end
+        
+        valid = 0;
+        for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
 
         // End Delay
        for( int ii = 0; ii < 5; ii++ ) @(posedge clk);

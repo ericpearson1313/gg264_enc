@@ -437,7 +437,7 @@ module gg_deblock_process
    );
  
      // save cur-lef, cur-abv bs for later re-use during chroma filtering
-    reg [0:15][1:0] bsl, bsa;
+    reg [0:15][2:0] bsl, bsa;
     always_ff @(posedge clk) begin : _bS_regs
         if( reset ) begin
             bsl <= 0;
@@ -485,15 +485,15 @@ module gg_deblock_process
             { 3'd0, 4'hE } : begin bs0 = (alwy)?{2{bs_cur_lef}}:6'd0; bs1 = (alwy)?{2{bs_lef_ale}}:6'd0; end
             { 3'd0, 4'hF } : begin bs0 = (alwy)?{2{bs_cur_lef}}:6'd0; bs1 = (alwy)?{2{bs_lef_ale}}:6'd0; bs2 = (alwy)?{2{bs_cur_abv}}:6'd0; end
             
-            { 3'd2, 4'h0 } : begin bs0 = (nlef)?{bsl[0], bsl[1]} :6'd0; end
-            { 3'd2, 4'h1 } : begin bs0 = (alwy)?{bsl[8], bsl[9]} :6'd0; bs1 = (ntop)?{bsa[0],bsa[1]}:6'd0; bs2 = (ntop)?{bsa[2],bsa[3]}:6'd0; end
-            { 3'd2, 4'h2 } : begin bs0 = (nlef)?{bsl[2], bsl[3]} :6'd0; end
-            { 3'd2, 4'h3 } : begin bs0 = (alwy)?{bsl[10],bsl[11]}:6'd0; bs1 = (alwy)?{bsa[8],bsa[9]}:6'd0; bs2 = (alwy)?{bsa[10],bsa[11]}:6'd0; end
+            { 3'd2, 4'h0 } : begin bs0 = (nlef)?{bsl[0], bsl[2]} :6'd0; end
+            { 3'd2, 4'h1 } : begin bs0 = (alwy)?{bsl[4], bsl[6]} :6'd0; bs1 = (ntop)?{bsa[0],bsa[1]}:6'd0; bs2 = (ntop)?{bsa[4],bsa[5]}:6'd0; end
+            { 3'd2, 4'h2 } : begin bs0 = (nlef)?{bsl[8], bsl[10]}:6'd0; end
+            { 3'd2, 4'h3 } : begin bs0 = (alwy)?{bsl[12],bsl[14]}:6'd0; bs1 = (alwy)?{bsa[8],bsa[9]}:6'd0; bs2 = (alwy)?{bsa[12],bsa[13]}:6'd0; end
             
-            { 3'd3, 4'h0 } : begin bs0 = (nlef)?{bsl[0], bsl[1]} :6'd0; end
-            { 3'd3, 4'h1 } : begin bs0 = (alwy)?{bsl[8], bsl[9]} :6'd0; bs1 = (ntop)?{bsa[0],bsa[1]}:6'd0; bs2 = (ntop)?{bsa[2],bsa[3]}:6'd0; end
-            { 3'd3, 4'h2 } : begin bs0 = (nlef)?{bsl[2], bsl[3]} :6'd0; end
-            { 3'd3, 4'h3 } : begin bs0 = (alwy)?{bsl[10],bsl[11]}:6'd0; bs1 = (alwy)?{bsa[8],bsa[9]}:6'd0; bs2 = (alwy)?{bsa[10],bsa[11]}:6'd0; end
+            { 3'd3, 4'h0 } : begin bs0 = (nlef)?{bsl[0], bsl[2]} :6'd0; end
+            { 3'd3, 4'h1 } : begin bs0 = (alwy)?{bsl[4], bsl[6]} :6'd0; bs1 = (ntop)?{bsa[0],bsa[1]}:6'd0; bs2 = (ntop)?{bsa[4],bsa[5]}:6'd0; end
+            { 3'd3, 4'h2 } : begin bs0 = (nlef)?{bsl[8], bsl[10]}:6'd0; end
+            { 3'd3, 4'h3 } : begin bs0 = (alwy)?{bsl[12],bsl[14]}:6'd0; bs1 = (alwy)?{bsa[8],bsa[9]}:6'd0; bs2 = (alwy)?{bsa[12],bsa[13]}:6'd0; end
             endcase
         end
     end
@@ -502,10 +502,10 @@ module gg_deblock_process
     gg_deblock_filter _core_filter
     (
         .clk        ( clk      ), // not used, combinatorial block
-        .blki       ( { cur_recon, lef_recon, abv_recon, ale_recon } ), // operate with current block as input
+        .blki       ( { ale_recon, abv_recon, lef_recon, cur_recon } ), // operate with current block as input
         .ch_flag    ( ch_flag  ),
-        .blko       ( { cur_filt, lef_filt, abv_filt, ale_filt } ),
-        .qpz        ( { cur_qpz, lef_qpz, abv_qpz, ale_qpz } ),
+        .blko       ( { ale_filt, abv_filt, lef_filt, cur_filt } ),
+        .qpz        ( { ale_qpz, abv_qpz, lef_qpz, cur_qpz } ),
         .bs         ( { { bs0[0], bs0[1] } , { bs1[0], bs1[1] }, { bs2[0], bs2[1] } } ),
         .FilterOffsetA ( FilterOffsetA ),
         .FilterOffsetB ( FilterOffsetB )
@@ -729,7 +729,7 @@ module gg_deblock_filter
             gg_deblock_filter_1x8 _filt0 ( 
                 .clk        ( clk      ),
                 .ch_flag    ( ch_flag  ),
-                .bs         ( 0 ),//( ii < 2 ) ? bs[0][0] : bs[0][1] ),
+                .bs         ( ( ii < 2 ) ? bs[0][0] : bs[0][1] ),
                 .alpha      ( alpha[0] ),
                 .beta       ( beta[0]  ),
                 .tc0        ( ( ii < 2 ) ? tc0[0][0] : tc0[0][1] ),
@@ -745,7 +745,7 @@ module gg_deblock_filter
             gg_deblock_filter_1x8 _filt1 ( 
                 .clk        ( clk      ),
                 .ch_flag    ( ch_flag  ),
-                .bs         ( 0 ),//( ii < 2 ) ? bs[1][0] : bs[1][1] ),
+                .bs         ( ( ii < 2 ) ? bs[1][0] : bs[1][1] ),
                 .alpha      ( alpha[1] ),
                 .beta       ( beta[1]  ),
                 .tc0        ( ( ii < 2 ) ? tc0[1][0] : tc0[1][1] ),
@@ -761,7 +761,7 @@ module gg_deblock_filter
             gg_deblock_filter_1x8 _filt2 ( 
                 .clk        ( clk      ),
                 .ch_flag    ( ch_flag  ),
-                .bs         ( 0 ),//( ii < 2 ) ? bs[2][0] : bs[2][1] ),
+                .bs         ( ( ii < 2 ) ? bs[2][0] : bs[2][1] ),
                 .alpha      ( alpha[2] ),
                 .beta       ( beta[2]  ),
                 .tc0        ( ( ii < 2 ) ? tc0[2][0] : tc0[2][1] ),
@@ -789,7 +789,7 @@ module gg_deblock_filter_1x8
  );
 
     logic filterSamplesFlag;
-    logic aq_lt_beta, ap_lt_beta, pq_lt_alpha, pq_lt_alpha_d4;
+    logic aq1_lt_beta, ap1_lt_beta, aq2_lt_beta, ap2_lt_beta, pq_lt_alpha, pq_lt_alpha_d4;
     logic [4:0]  tc;
     logic [2:0]  dummy1;
     logic [5:0]  delta_clip;
@@ -805,10 +805,15 @@ module gg_deblock_filter_1x8
 
     always_comb begin
         // make filter decision based on thresholds    
-        aq_lt_beta =   ( { 1'b0, qi[1] } - { 1'b0, qi[0] } < { 1'b0, beta  } || 
+        aq2_lt_beta =   ( { 1'b0, qi[2] } - { 1'b0, qi[0] } < { 1'b0, beta  } || 
+                         { 1'b0, qi[0] } - { 1'b0, qi[2] } < { 1'b0, beta  } ) ? 1'b1 : 1'b0;
+        ap2_lt_beta =   ( { 1'b0, pi[2] } - { 1'b0, pi[0] } < { 1'b0, beta  } || 
+                         { 1'b0, pi[0] } - { 1'b0, pi[2] } < { 1'b0, beta  } ) ? 1'b1 : 1'b0;
+        aq1_lt_beta =   ( { 1'b0, qi[1] } - { 1'b0, qi[0] } < { 1'b0, beta  } || 
                          { 1'b0, qi[0] } - { 1'b0, qi[1] } < { 1'b0, beta  } ) ? 1'b1 : 1'b0;
-        ap_lt_beta =   ( { 1'b0, pi[1] } - { 1'b0, pi[0] } < { 1'b0, beta  } || 
+        ap1_lt_beta =   ( { 1'b0, pi[1] } - { 1'b0, pi[0] } < { 1'b0, beta  } || 
                          { 1'b0, pi[0] } - { 1'b0, pi[1] } < { 1'b0, beta  } ) ? 1'b1 : 1'b0;
+
         pq_lt_alpha =  ( { 1'b0, pi[0] } - { 1'b0, qi[0] } < { 1'b0, alpha } || 
                          { 1'b0, qi[0] } - { 1'b0, pi[0] } < { 1'b0, alpha } ) ? 1'b1 : 1'b0 ;
         alpha_d4      = alpha[7:2] + 2;
@@ -816,10 +821,10 @@ module gg_deblock_filter_1x8
                           { 1'b0, qi[0] } - { 1'b0, pi[0] } < { 1'b0, alpha_d4 } ) ? 1'b1 : 1'b0 ;
      
         // Bs < 4 decision flag
-        filterSamplesFlag = pq_lt_alpha & ap_lt_beta & aq_lt_beta;
+        filterSamplesFlag = pq_lt_alpha & ap1_lt_beta & aq1_lt_beta;
 
         // Calculate p0, q0 for Bs < 4 
-        tc = tc0 + (( ch_flag ) ? 5'd1 : ({ 4'b0, ap_lt_beta } + { 4'b0, aq_lt_beta }));
+        tc = tc0 + (( ch_flag ) ? 5'd1 : ({ 4'b0, ap2_lt_beta } + { 4'b0, aq2_lt_beta }));
         delta[11:0] = ( { 2'b00  , qi[0], 2'b00 } - { 2'b00  , pi[0], 2'b00 } ) +
                       ( { 4'b0000, pi[1]        } - { 4'b0000, qi[1]        } ) + 12'd4;
         delta_clip[5:0] = ( !delta[11] && delta[11:3] >  { 4'b0000,  tc[4:0] } ) ? { 1'b0,  tc[4:0] } :
@@ -837,8 +842,8 @@ module gg_deblock_filter_1x8
                    (  p1d[10] && p1d[10:1] <= {5'b11111, ~tc0[4:0]} ) ? { 1'b1, ~tc0[4:0] } + 6'd1 : p1d[6:1];
         q1d_clip = ( !q1d[10] && q1d[10:1] >  {5'b00000,  tc0[4:0]} ) ? { 1'b0,  tc0[4:0] } :
                    (  q1d[10] && q1d[10:1] <= {5'b11111, ~tc0[4:0]} ) ? { 1'b1, ~tc0[4:0] } + 6'd1 : q1d[6:1];
-        p1pd = pi[1] + p1d_clip;
-        p1pd = qi[1] + q1d_clip;
+        p1pd = pi[1] + { {2{p1d_clip[5]}}, p1d_clip };
+        q1pd = qi[1] + { {2{q1d_clip[5]}}, q1d_clip };
         
         // Calculate functions for p0, p1, p2, q0, q1, q2
         
@@ -857,14 +862,14 @@ module gg_deblock_filter_1x8
         qo = qi;
         // Bs == 4
         if( filterSamplesFlag && bs[2:0] == 3'd4 ) begin
-            if( ap_lt_beta && pq_lt_alpha_d4 && !ch_flag ) begin
+            if( ap2_lt_beta && pq_lt_alpha_d4 && !ch_flag ) begin
                 po[0] = p0f[10:3];
                 po[1] = p1f[9:2];
                 po[2] = p2f[10:3];
             end else begin
                 po[0] = p0cf[9:2];
             end
-            if( aq_lt_beta && pq_lt_alpha_d4 && !ch_flag ) begin
+            if( aq2_lt_beta && pq_lt_alpha_d4 && !ch_flag ) begin
                 qo[0] = q0f[10:3];
                 qo[1] = q1f[9:2];
                 qo[2] = q2f[10:3];
@@ -877,9 +882,9 @@ module gg_deblock_filter_1x8
         else if( filterSamplesFlag && bs[2:0] != 3'd0 ) begin
             po[0] = p0pd;
             qo[0] = q0md;
-            if( ap_lt_beta && !ch_flag )
+            if( ap2_lt_beta && !ch_flag )
                 po[1] = p1pd;
-            if( aq_lt_beta && !ch_flag )
+            if( aq2_lt_beta && !ch_flag )
                 qo[1] = q1pd;
         end
     end   
