@@ -309,7 +309,7 @@ module gg_deblock_testbench(
         for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
         
         
-        fd = $fopen( "C:/Users/ecp/Documents/gg264_enc/src/test/deblock_test.txt", "r");
+        fd = $fopen( "C:/Users/ecp/Documents/gg264_enc/src/test/deblock_test2.txt", "r");
         $write("*****************************************************************\n");
         $write("** \n");
         $write("** F I L E       V E C T O R      T E S T\n");
