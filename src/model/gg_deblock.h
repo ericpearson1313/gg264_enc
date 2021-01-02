@@ -30,5 +30,6 @@ typedef struct _DeblockCtx {
 
 } DeblockCtx;
 
+void gg_deblock_close();
 void gg_deblock_init(DeblockCtx* dbp, int disable_deblock_filter_idc, int filterOffsetA, int filterOffsetB, int mb_width, int mb_height);
 void gg_deblock_mb(DeblockCtx* dbp, int mbx, int mby, char* recon_y, char* recon_cb, char* recon_cr, int* num_coeff_y, int* num_coeff_cb, int* num_coeff_cr, int qp, int refidx, int mb_type);

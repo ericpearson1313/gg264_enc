@@ -6,8 +6,13 @@
 #include "gg_process.h"
 #include "gg_deblock.h"
 
-#define PIC_WIDTH 720
-#define PIC_HEIGHT 480
+//#define INPUT_YUV "cheer_if.yuv"
+//#define PIC_WIDTH 720
+//#define PIC_HEIGHT 480
+
+#define INPUT_YUV "foreman_qcif.yuv"
+#define PIC_WIDTH 176
+#define PIC_HEIGHT 144
 
 int mb_width = PIC_WIDTH>>4;
 int mb_height = PIC_HEIGHT>>4;
@@ -844,7 +849,9 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
         if (ggo_intra_col >= mb_width)
             ggo_intra_col = 0;
     }
-    
+
+    gg_deblock_close();
+
     // stop slice
     ggo_rbsp_trailing_bits();
     ggo_put_null("}");
@@ -925,15 +932,17 @@ void recon_copy_to_ref(int refidx)
         *ref++ = *recon++;
 }
 
-int main()
+int main( int argc, int **argv )
 {
     test_run_before();
    
+    printf("argc %d\n", argc);
     printf("Hello from the Great Gobbler!\n");
 
     recon_init("test_stream.yuv");
     ggo_init("test_stream_grey.264");
-    ggi_init("cheer_if.yuv");
+    //ggi_init("cheer_if.yuv");
+    ggi_init( INPUT_YUV );
 
     // Grey long term ref
     ggo_sequence_parameter_set();

@@ -48,7 +48,7 @@ module gg_deblock_testbench(
     ///////////////////////
     
     initial begin
-        #(20000ns);
+        #(200000ns);
         $write("GOBBLE: Sim terminated; hard coded time limit reached.\n");
         $finish;
     end
@@ -205,7 +205,13 @@ module gg_deblock_testbench(
     
     assign test_ale =  24'b_0__0__0__1__0__0__1__1__0__1__0__1__1__1__1__1__0__0__0__1__0__0__0__1;
     assign test_idx = 192'h00_00_00_00_00_00_01_04_00_02_00_08_03_06_09_0C_00_00_00_10_00_00_00_14;
-       
+    int fd;
+    string line;
+    logic [7:0] command;
+    logic [3:0] vmask;
+    logic [0:15][7:0] tb_data;
+    logic [0:15][7:0] sel_out;
+   
     initial begin
         // frame
         disable_deblock_filter_idc = 0;
@@ -298,17 +304,79 @@ module gg_deblock_testbench(
             end
             @(posedge clk);
         end 
+        
+        valid = 0;
+        for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
+        
+        
+        fd = $fopen( "C:/Users/ecp/Documents/gg264_enc/src/test/deblock_test.txt", "r");
+        $write("*****************************************************************\n");
+        $write("** \n");
+        $write("** F I L E       V E C T O R      T E S T\n");
+        $write("** \n");
+        $write("*****************************************************************\n");
+        $write("\n");
+        
+        valid = 0;
+        while( !$feof( fd ) ) begin
+            // read stimulus vector from file
+            $fgets( line, fd ); // line 1 - params
+            $sscanf( line, "%h", command );
+            if( command == 0 ) begin // frame info
+                $fgets( line, fd ); // line 1 - params
+                $sscanf( line, "%h %h %h %h %h", disable_deblock_filter_idc, FilterOffsetA, FilterOffsetB, mb_width, mb_height  );
+                
+            end else if( command == 1 ) begin // macroblock info
+                $fgets( line, fd ); // line 1 - params
+                $sscanf( line, "%h %h %h %h %h %h %h", mbx, mby, qpy, mbtype, refidx, mvx, mvy );
+                valid = 0;
+                for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
+                valid = 1;
+            end else if( command == 2 ) begin // compare one output
+                $fgets( line, fd ); // line 1 - params
+                $sscanf( line, "%h %h %h %h %h %h %h %h %h %h %h %h %h %h %h %h %h", vmask, tb_data[0] , tb_data[1] , tb_data[2] , tb_data[3],
+                  tb_data[4] , tb_data[5] , tb_data[6] , tb_data[7], tb_data[8] , tb_data[9] , 
+                  tb_data[10], tb_data[11], tb_data[12], tb_data[13], tb_data[14], tb_data[15] );
+                // check valid flag asserted
+                if( vmask == 0 && !ale_valid || vmask == 1 && !abv_valid || vmask == 2 && !lef_valid || vmask == 3 && !cur_valid ) begin
+                    $write("ERROR: Mask mismatch mb[%h,%h], cidx %h, bidx %h, mask %h\n", mbx, mby, cidx, bidx, vmask );
+                    $write("ERROR: mask idx %h, flags [3:0]= [%d,%d,%d,%d]\n", vmask, cur_valid, lef_valid, abv_valid,  ale_valid );
+                    err++;
+                end
+                // check write data
+                sel_out = ( vmask == 0 ) ? ale_filt : 
+                          ( vmask == 1 ) ? abv_filt :
+                          ( vmask == 2 ) ? lef_filt : cur_filt;
+                if( sel_out != tb_data ) begin
+                    $write("ERROR: Filtered mismatch mb[%h,%h], cidx %h, bidx %h, mask %h\n", mbx, mby, cidx, bidx, vmask );
+                    $write("ERROR: dut_filt = %0h\n", sel_out );
+                    $write("ERROR: ref_filt = %0h\n", tb_data );
+                    err++;
+                end
+            end else if( command == 3 ) begin // load stimulus
+                $fgets( line, fd ); // line 1 - params
+                #(0.1ns);
+                 $sscanf( line, "%h %h %h %h %h %h %h %h %h %h %h %h %h %h %h %h %h %h %h", cidx, bidx, num_coeff, recon[0] , recon[1] , recon[2] , recon[3],
+                  recon[4] , recon[5] , recon[6] , recon[7], recon[8] , recon[9] , recon[10], recon[11], recon[12], recon[13], recon[14], recon[15] );
+                @(negedge clk); // advance simulaiton to check stage   
+                         
+            end else if( command == 4 ) begin // Advance sim to end of cycle
+                @(posedge clk);
+            end
+       end // feof
+       valid = 0;
+       
         if( err ) begin
             $write("ERROR: test failed with %d errors\n", err );
         end else begin
             $write("PASS: test passed without failures\n" );
         end
-        
-        valid = 0;
-        for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
-
-        // End Delay
+   
+       
+        // Finish
        for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
+       $write("GOBBLE: Sim completed\n");
+       $fclose( fd );
        $finish;
     end
 

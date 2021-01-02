@@ -444,7 +444,7 @@ module gg_deblock_process
             bsa <= 0;
         end else begin
             for( int jj = 0; jj < 16; jj++ ) begin
-                if( cidx == 0 && bidx == jj ) begin // save each luma bs
+                if( valid && cidx == 0 && bidx == jj ) begin // save each luma bs
                     bsl[jj] <= bs_cur_lef;
                     bsa[jj] <= bs_cur_abv;
                 end
@@ -838,10 +838,10 @@ module gg_deblock_filter_1x8
         p1d[10:0] = { 2'b00, pi[2], 1'b1 } + { 3'b000, pi[0] } + { 3'b000, qi[0] } - { 1'b0, pi[1], 2'b00 };
         q1d[10:0] = { 2'b00, qi[2], 1'b1 } + { 3'b000, pi[0] } + { 3'b000, qi[0] } - { 1'b0, qi[1], 2'b00 };
 
-        p1d_clip = ( !p1d[10] && p1d[10:1] >  {5'b00000,  tc0[4:0]} ) ? { 1'b0,  tc0[4:0] } :
-                   (  p1d[10] && p1d[10:1] <= {5'b11111, ~tc0[4:0]} ) ? { 1'b1, ~tc0[4:0] } + 6'd1 : p1d[6:1];
-        q1d_clip = ( !q1d[10] && q1d[10:1] >  {5'b00000,  tc0[4:0]} ) ? { 1'b0,  tc0[4:0] } :
-                   (  q1d[10] && q1d[10:1] <= {5'b11111, ~tc0[4:0]} ) ? { 1'b1, ~tc0[4:0] } + 6'd1 : q1d[6:1];
+        p1d_clip = ( !p1d[10] && p1d[10:2] >  {5'b00000,  tc0[4:0]} ) ? { 1'b0,  tc0[4:0] } :
+                   (  p1d[10] && p1d[10:2] <= {5'b11111, ~tc0[4:0]} ) ? { 1'b1, ~tc0[4:0] } + 6'd1 : p1d[7:2];
+        q1d_clip = ( !q1d[10] && q1d[10:2] >  {5'b00000,  tc0[4:0]} ) ? { 1'b0,  tc0[4:0] } :
+                   (  q1d[10] && q1d[10:2] <= {5'b11111, ~tc0[4:0]} ) ? { 1'b1, ~tc0[4:0] } + 6'd1 : q1d[7:2];
         p1pd = pi[1] + { {2{p1d_clip[5]}}, p1d_clip };
         q1pd = qi[1] + { {2{q1d_clip[5]}}, q1d_clip };
         

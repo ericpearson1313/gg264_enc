@@ -1,6 +1,13 @@
+#define _CRT_SECURE_NO_WARNINGS 1
 #include <stdio.h>
 #include "gg_process.h"
 #include "gg_deblock.h"
+
+
+FILE* db_fp;
+
+#define LogFrame() { db_fp = fopen("deblock_test.txt", "w"); fprintf(db_fp, "0\n%x %x %x %x %x\n", disable_deblock_filter_idc, filterOffsetA, filterOffsetB, mb_width-1, mb_height-1); }
+#define LogClose() { fclose(db_fp); }
 
 // Init frame deblocking structure
 void gg_deblock_init(DeblockCtx* dbp, int disable_deblock_filter_idc, int filterOffsetA, int filterOffsetB, int mb_width, int mb_height ) {
@@ -22,6 +29,12 @@ void gg_deblock_init(DeblockCtx* dbp, int disable_deblock_filter_idc, int filter
 	// init pointers
 	dbp->mbx = 0;
 	dbp->ring_idx = 0;
+
+	LogFrame();
+}
+
+void gg_deblock_close() {
+	LogClose();
 }
 
 void deblock_c4(DeblockCtx* dbp, int bidx, int vert_flag, BlkInfo* q_blk, BlkInfo* p_blk, int* bS)
@@ -231,6 +244,16 @@ void deblock_y4(DeblockCtx* dbp, int bidx, int vert_flag, BlkInfo* q_blk, BlkInf
 	}
 }
 
+//#define LogOutput( b, d ) {}
+//#define LogInput( b, cidx, bidx ) {}
+//#define LogStep() {} 
+
+#define LogOutput( b, dir ) { fprintf(db_fp, "2\n%x ", (dir)); for (int ii = 0; ii < 16; ii++) fprintf(db_fp, "%02x ", (b)->d[ii] & 0xff); fprintf(db_fp, "\n"); }
+#define LogInput( b, cidx, bidx ) { fprintf(db_fp, "3\n%x %x %x ", (cidx), (bidx), (b)->nz); for (int ii = 0; ii < 16; ii++) fprintf(db_fp, "%02x ", (b)->d[ii] & 0xff); fprintf(db_fp, "\n"); }
+#define LogStep() { fprintf(db_fp, "4\n"); } 
+#define LogMblock( ) { fprintf(db_fp, "1\n%x %x %x %x %x %x %x\n", mbx, mby, qp, mb_type, refidx, 0, 0); }
+
+
 #define WriteBlkY(r, x, y, b) { for (int py = 0; py < 4; py++) for (int px = 0; px < 4; px++) \
 				(r)[(mby * 16 + (y) * 4 + py) * dbp->mb_width * 16 + mbx * 16 + (x) * 4 + px] = 0xff & (b)->d[py * 4 + px];}
 #define WriteBlkC(r, x, y, b) { for (int py = 0; py < 4; py++) for (int px = 0; px < 4; px++) \
@@ -246,6 +269,9 @@ void gg_deblock_mb(DeblockCtx* dbp, int mbx, int mby, char *recon_y, char *recon
 {
 	int bidx;
 	int blkx, blky;
+
+
+	LogMblock();
 
 	// No function if deblocking disabled
 	if (dbp->disable_deblock_filter_idc == 1)
@@ -317,88 +343,138 @@ void gg_deblock_mb(DeblockCtx* dbp, int mbx, int mby, char *recon_y, char *recon
 	// in block order, with filter/write/copy early as possible to mimic HW
 
 	// 0
+	LogInput(BlkPtr(0), 0, 0);
 	if (nlef) deblock_y4(dbp, 0, 0, BlkPtr(0), LefPtr(5), &bSh[0]);
 	if (nlef) WriteBlkY(recon_y, -1, 0, LefPtr(5));
+	if (nlef) LogOutput( LefPtr(5), 2 );
+	LogStep();
 
 	// 1
+	LogInput(BlkPtr(1), 0, 1);
 	if (alwy) deblock_y4(dbp, 1, 0, BlkPtr(1), BlkPtr(0), &bSh[4]);
 	if (ntop) deblock_y4(dbp, 0, 1, BlkPtr(0), AbvPtr(0), &bSv[0]);
 	if (ntop) WriteBlkY(recon_y, 0, -1, AbvPtr(0));
+	if (ntop) LogOutput( AbvPtr(0), 0 );
+	LogStep();
 
 	// 2
+	LogInput(BlkPtr(2), 0, 2);
 	if (nlef) deblock_y4(dbp, 2, 0, BlkPtr(2), LefPtr(7), &bSh[1]);
 	if (nlef) WriteBlkY(recon_y, -1, 1, LefPtr(7));
+	if (nlef) LogOutput( LefPtr(7), 2);
+	LogStep();
 
 	// 3
+	LogInput(BlkPtr(3), 0, 3);
 	if (alwy) deblock_y4(dbp, 3, 0, BlkPtr(3), BlkPtr(2), &bSh[5]);
 	if (alwy) deblock_y4(dbp, 2, 1, BlkPtr(2), BlkPtr(0), &bSv[4]);
 	if (alwy) WriteBlkY(recon_y, 0, 0, BlkPtr(0));
+	if (alwy) LogOutput(BlkPtr(0), 0);
+	LogStep();
 
 	// 4
+	LogInput(BlkPtr(4), 0, 4);
 	if (alwy) deblock_y4(dbp, 4, 0, BlkPtr(4), BlkPtr(1), &bSh[8]);
 	if (ntop) deblock_y4(dbp, 1, 1, BlkPtr(1), AbvPtr(1), &bSv[1]);
 	if (ntop) WriteBlkY(recon_y, 1, -1, AbvPtr(1));
+	if (ntop) LogOutput( AbvPtr(1), 0);
+	LogStep();
 
 	// 5
+	LogInput(BlkPtr(5), 0, 5);
 	if (alwy) deblock_y4(dbp, 5, 0, BlkPtr(5), BlkPtr(4), &bSh[12]);
 	if (ntop) deblock_y4(dbp, 4, 1, BlkPtr(4), AbvPtr(2), &bSv[2]);
 	if (ntop) deblock_y4(dbp, 5, 1, BlkPtr(5), AbvPtr(3), &bSv[3]);
 	if (ntop) WriteBlkY(recon_y, 2, -1, AbvPtr(2));
 	if (ntop) WriteBlkY(recon_y, 3, -1, AbvPtr(3));
+	if (ntop) LogOutput(AbvPtr(2), 0);
+	if (ntop) LogOutput(AbvPtr(3), 1);
+	LogStep();
 
 	// 6
+	LogInput(BlkPtr(6), 0, 6);
 	if (alwy) deblock_y4(dbp, 6, 0, BlkPtr(6), BlkPtr(3), &bSh[9]);
 	if (alwy) deblock_y4(dbp, 3, 1, BlkPtr(3), BlkPtr(1), &bSv[5]);
 	if (alwy) WriteBlkY(recon_y, 1, 0, BlkPtr(1));
+	if (alwy) LogOutput(BlkPtr(1), 0);
+	LogStep();
 
 	// 7
+	LogInput(BlkPtr(7), 0, 7);
 	if (alwy) deblock_y4(dbp, 7, 0, BlkPtr(7), BlkPtr(6), &bSh[13]);
 	if (alwy) deblock_y4(dbp, 6, 1, BlkPtr(6), BlkPtr(4), &bSv[6]);
 	if (alwy) deblock_y4(dbp, 7, 1, BlkPtr(7), BlkPtr(5), &bSv[7]);
 	if (alwy) WriteBlkY(recon_y, 2, 0, BlkPtr(4));
 	if (rpic) WriteBlkY(recon_y, 3, 0, BlkPtr(5));
+	if (alwy) LogOutput(BlkPtr(4), 0);
+	if (rpic) LogOutput(BlkPtr(5), 1);
+	LogStep();
 
 	// 8
+	LogInput(BlkPtr(8), 0, 8);
 	if (nlef) deblock_y4(dbp, 8, 0, BlkPtr(8), LefPtr(13), &bSh[2]);
 	if (nlef) WriteBlkY(recon_y, -1, 2, LefPtr(13));
+	if (nlef) LogOutput(LefPtr(13), 2);
+	LogStep();
 
 	// 9
+	LogInput(BlkPtr(9), 0, 9);
 	if (alwy) deblock_y4(dbp, 9, 0, BlkPtr(9), BlkPtr(8), &bSh[6]);
 	if (alwy) deblock_y4(dbp, 8, 1, BlkPtr(8), BlkPtr(2), &bSv[8]);
-	if (alwy) WriteBlkY(recon_y, 0, 1, BlkPtr(2));
+	if (alwy) LogOutput(BlkPtr(2), 0);
+	LogStep();
 
 	// 10
+	LogInput(BlkPtr(10), 0, 10);
 	if (nlef) deblock_y4(dbp, 10, 0, BlkPtr(10), LefPtr(15), &bSh[3]);
 	if (nlbp) WriteBlkY(recon_y, -1, 3, LefPtr(15));
+	if (nlbp) LogOutput(LefPtr(15), 2);
 	if (nlef) CopyBlk(AlePtr(3), LefPtr(15));
+	LogStep();
 
 	// 11
+	LogInput(BlkPtr(11), 0, 11);
 	if (alwy) deblock_y4(dbp, 11, 0, BlkPtr(11), BlkPtr(10), &bSh[7]);
 	if (alwy) deblock_y4(dbp, 10, 1, BlkPtr(10), BlkPtr(8), &bSv[12]);
 	if (bpic) WriteBlkY(recon_y, 0, 3, BlkPtr(10));
 	if (alwy) WriteBlkY(recon_y, 0, 2, BlkPtr(8));
+	if (bpic) LogOutput(BlkPtr(10),2);
+	if (alwy) LogOutput(BlkPtr(8) ,0);
 	if (alwy) CopyBlk(AbvPtr(0), BlkPtr(10));
+	LogStep();
 
 	// 12
+	LogInput(BlkPtr(12), 0, 12);
 	if (alwy) deblock_y4(dbp, 12, 0, BlkPtr(12), BlkPtr(9), &bSh[10]);
 	if (alwy) deblock_y4(dbp, 9, 1, BlkPtr(9), BlkPtr(3), &bSv[9]);
 	if (alwy) WriteBlkY(recon_y, 1, 1, BlkPtr(3));
+	if (alwy) LogOutput(BlkPtr(3), 0);
+	LogStep();
 
 	// 13
+	LogInput(BlkPtr(13), 0, 13);
 	if (alwy) deblock_y4(dbp, 13, 0, BlkPtr(13), BlkPtr(12), &bSh[14]);
 	if (alwy) deblock_y4(dbp, 12, 1, BlkPtr(12), BlkPtr(6), &bSv[10]);
 	if (alwy) deblock_y4(dbp, 13, 1, BlkPtr(13), BlkPtr(7), &bSv[11]);
 	if (alwy) WriteBlkY(recon_y, 2, 1, BlkPtr(6));
 	if (rpic) WriteBlkY(recon_y, 3, 1, BlkPtr(7));
+	if (alwy) LogOutput(BlkPtr(6), 0);
+	if (rpic) LogOutput(BlkPtr(7), 1);
+	LogStep();
 
 	// 14
+	LogInput(BlkPtr(14), 0, 14);
 	if (alwy) deblock_y4(dbp, 14, 0, BlkPtr(14), BlkPtr(11), &bSh[11]);
 	if (alwy) deblock_y4(dbp, 11, 1, BlkPtr(11), BlkPtr(9), &bSv[13]);
 	if (alwy) WriteBlkY(recon_y, 1, 2, BlkPtr(9));
 	if (bpic) WriteBlkY(recon_y, 1, 3, BlkPtr(11));
+	if (alwy) LogOutput(BlkPtr(9), 0);
+	if (bpic) LogOutput(BlkPtr(11), 2);
 	if (alwy) CopyBlk(AbvPtr(1), BlkPtr(11));
+	LogStep();
 
 	// 15
+	LogInput(BlkPtr(15), 0, 15);
 	if (alwy) deblock_y4(dbp, 15, 0, BlkPtr(15), BlkPtr(14), &bSh[15]);
 	if (alwy) deblock_y4(dbp, 14, 1, BlkPtr(14), BlkPtr(12), &bSv[14]);
 	if (alwy) deblock_y4(dbp, 15, 1, BlkPtr(15), BlkPtr(13), &bSv[15]);
@@ -406,26 +482,42 @@ void gg_deblock_mb(DeblockCtx* dbp, int mbx, int mby, char *recon_y, char *recon
 	if (rpic) WriteBlkY(recon_y, 3, 2, BlkPtr(13));
 	if (bpic) WriteBlkY(recon_y, 2, 3, BlkPtr(14));
 	if (brcn) WriteBlkY(recon_y, 3, 3, BlkPtr(15));
+	if (alwy) LogOutput(BlkPtr(12), 0);
+	if (rpic) LogOutput(BlkPtr(13), 1);
+	if (bpic) LogOutput(BlkPtr(14), 2);
+	if (brcn) LogOutput(BlkPtr(15), 3);
 	if (alwy) CopyBlk(AbvPtr(2), BlkPtr(14));
 	if (rpic) CopyBlk(AbvPtr(3), BlkPtr(15));
+	LogStep();
 
 	// 16
+	LogInput(BlkPtr(16), 2, 0);
 	if (nlef) deblock_c4(dbp, 0, 0, BlkPtr(16), LefPtr(17), &bSh[0]);
 	if (nlef) WriteBlkC(recon_cb, -1, 0, LefPtr(17));
+	if (nlef) LogOutput(LefPtr(17), 2);
+	LogStep();
 
 	// 17
+	LogInput(BlkPtr(17), 2, 1);
 	if (alwy) deblock_c4(dbp, 1, 0, BlkPtr(17), BlkPtr(16), &bSh[8]);
 	if (ntop) deblock_c4(dbp, 0, 1, BlkPtr(16), AbvPtr(4), &bSv[0]);
 	if (ntop) deblock_c4(dbp, 1, 1, BlkPtr(17), AbvPtr(5), &bSv[2]);
 	if (ntop) WriteBlkC(recon_cb, 0, -1, AbvPtr(4));
 	if (ntop) WriteBlkC(recon_cb, 1, -1, AbvPtr(5));
+	if (ntop) LogOutput(AbvPtr(4), 0);
+	if (ntop) LogOutput(AbvPtr(5), 1);
+	LogStep();
 
 	// 18
+	LogInput(BlkPtr(18), 2, 2);
 	if (nlef) deblock_c4(dbp, 2, 0, BlkPtr(18), LefPtr(19), &bSh[2]);
 	if (nlbp) WriteBlkC(recon_cb, -1, 1, LefPtr(19));
+	if (nlbp) LogOutput(LefPtr(19), 2);
 	if (nlef) CopyBlk(AlePtr(5), LefPtr(19));
+	LogStep();
 
 	// 19
+	LogInput(BlkPtr(19), 2, 3);
 	if (alwy) deblock_c4(dbp, 3, 0, BlkPtr(19), BlkPtr(18), &bSh[10]);
 	if (alwy) deblock_c4(dbp, 2, 1, BlkPtr(18), BlkPtr(16), &bSv[8]);
 	if (alwy) deblock_c4(dbp, 3, 1, BlkPtr(19), BlkPtr(17), &bSv[10]);
@@ -433,26 +525,42 @@ void gg_deblock_mb(DeblockCtx* dbp, int mbx, int mby, char *recon_y, char *recon
 	if (rpic) WriteBlkC(recon_cb, 1, 0, BlkPtr(17));
 	if (bpic) WriteBlkC(recon_cb, 0, 1, BlkPtr(18));
 	if (brcn) WriteBlkC(recon_cb, 1, 1, BlkPtr(19));
+	if (alwy) LogOutput(BlkPtr(16), 0);
+	if (rpic) LogOutput(BlkPtr(17), 1);
+	if (bpic) LogOutput(BlkPtr(18), 2);
+	if (brcn) LogOutput(BlkPtr(19), 3);
 	if (alwy) CopyBlk(AbvPtr(4), BlkPtr(18));
 	if (rpic) CopyBlk(AbvPtr(5), BlkPtr(19));
+	LogStep();
 
 	// 20
+	LogInput(BlkPtr(20), 3, 0);
 	if (nlef) deblock_c4(dbp, 0, 0, BlkPtr(20), LefPtr(21), &bSh[0]);
 	if (nlef) WriteBlkC(recon_cr, -1, 0, LefPtr(21));
+	if (nlef) LogOutput(LefPtr(21), 2);
+	LogStep();
 
 	// 21
+	LogInput(BlkPtr(21), 3, 1);
 	if (alwy) deblock_c4(dbp, 1, 0, BlkPtr(21), BlkPtr(20), &bSh[8]);
 	if (ntop) deblock_c4(dbp, 0, 1, BlkPtr(20), AbvPtr(6), &bSv[0]);
 	if (ntop) deblock_c4(dbp, 1, 1, BlkPtr(21), AbvPtr(7), &bSv[2]);
 	if (ntop) WriteBlkC(recon_cr, 0, -1, AbvPtr(6));
 	if (ntop) WriteBlkC(recon_cr, 1, -1, AbvPtr(7));
+	if (ntop) LogOutput(AbvPtr(6), 0);
+	if (ntop) LogOutput(AbvPtr(7), 1);
+	LogStep();
 
 	// 22
+	LogInput(BlkPtr(22), 3, 2);
 	if (nlef) deblock_c4(dbp, 2, 0, BlkPtr(22), LefPtr(23), &bSh[2]);
 	if (nlbp) WriteBlkC(recon_cr, -1, 1, LefPtr(23));
+	if (nlbp) LogOutput(LefPtr(23), 2);
 	if (nlef) CopyBlk(AlePtr(7), LefPtr(23));
+	LogStep();
 
 	// 23
+	LogInput(BlkPtr(23), 3, 3);
 	if (alwy) deblock_c4(dbp, 3, 0, BlkPtr(23), BlkPtr(22), &bSh[10]);
 	if (alwy) deblock_c4(dbp, 2, 1, BlkPtr(22), BlkPtr(20), &bSv[8]);
 	if (alwy) deblock_c4(dbp, 3, 1, BlkPtr(23), BlkPtr(21), &bSv[10]);
@@ -460,9 +568,13 @@ void gg_deblock_mb(DeblockCtx* dbp, int mbx, int mby, char *recon_y, char *recon
 	if (rpic) WriteBlkC(recon_cr, 1, 0, BlkPtr(21));
 	if (bpic) WriteBlkC(recon_cr, 0, 1, BlkPtr(22));
 	if (brcn) WriteBlkC(recon_cr, 1, 1, BlkPtr(23));
+	if (alwy) LogOutput(BlkPtr(20), 0);
+	if (rpic) LogOutput(BlkPtr(21), 1);
+	if (bpic) LogOutput(BlkPtr(22), 2);
+	if (brcn) LogOutput(BlkPtr(23), 3);
 	if (alwy) CopyBlk(AbvPtr(6), BlkPtr(22));
 	if (rpic) CopyBlk(AbvPtr(7), BlkPtr(23));
-
+	LogStep();
 
 	//printf("Deblocked Recon\n");
 	//for (bidx = 0; bidx < 24; bidx++) {
