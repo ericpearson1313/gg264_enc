@@ -477,46 +477,48 @@ int gg_process_block(int qpy, int offset, int deadzone, int *ref, int *orig, int
 	//}
 	//printf(" } \n");
 
-	//printf("%x %x %x %x %x %x %x %x\n", *bitcount, cidx, bidx, qpy, abv_oop, lef_oop, offset, deadzone);
-	//for (int ii = 0; ii < 16; ii++) { printf("%3x ", orig[ii]); }
-	//printf("\n");
-	//for (int ii = 0; ii < 16; ii++) { printf("%3x ", ref[ii]); }
-	//printf("\n");
-	//for (int ii = 0; ii < 16; ii++) { printf("%3x ", ( ch_flag && dc_flag ) ? 0 : recon[ii]); }
-	//printf("\n");
-	//int obits[512];
-	//int omask[512];
-	//for (int ii = 0; ii < 512; ii++) {
-	//	obits[ii] = 0;
-	//	omask[ii] = 0;
-	//}
-	//int bit_index = 0;
-	//for (int ii = 0; ii < vlc_idx; ii++) {
-	//	for (int jj = bits->vlc[ii].i_size - 1; jj >= 0; jj--) {
-	//		obits[512-*bitcount+bit_index] = ((bits->vlc[ii].i_bits >> jj) & 1);
-	//		omask[512-*bitcount+bit_index] = 1;
-	//		bit_index++;
-	//	}
-	//}
-	//unsigned int bitword;
-	//for (int ii = 0; ii < 16; ii++) {
-	//	for (int jj = 0; jj < 32; jj++) {
-	//		bitword = ( bitword << 1 ) | ( obits[ii * 32 + jj] & 1 );
-	//	}
-	//	printf("%08x ", bitword);
-	//}
-	//printf("\n");
-	//for (int ii = 0; ii < 16; ii++) {
-	//	for (int jj = 0; jj < 32; jj++) {
-	//		bitword = ( bitword << 1 ) | ( omask[ii * 32 + jj] & 1 );
-	//	}
-	//	printf("%08x ", bitword);
-	//}
-	//printf("\n");
-
+//#define LOG_RECON
+#ifdef LOG_RECON
+	printf("%x %x %x %x %x %x %x %x\n", *bitcount, cidx, bidx, qpy, abv_oop, lef_oop, offset, deadzone);
+	for (int ii = 0; ii < 16; ii++) { printf("%3x ", orig[ii]); }
+	printf("\n");
+	for (int ii = 0; ii < 16; ii++) { printf("%3x ", ref[ii]); }
+	printf("\n");
+	for (int ii = 0; ii < 16; ii++) { printf("%3x ", ( ch_flag && dc_flag ) ? 0 : recon[ii]); }
+	printf("\n");
+	int obits[512];
+	int omask[512];
+	for (int ii = 0; ii < 512; ii++) {
+		obits[ii] = 0;
+		omask[ii] = 0;
+	}
+	int bit_index = 0;
+	for (int ii = 0; ii < vlc_idx; ii++) {
+		for (int jj = bits->vlc[ii].i_size - 1; jj >= 0; jj--) {
+			obits[512-*bitcount+bit_index] = ((bits->vlc[ii].i_bits >> jj) & 1);
+			omask[512-*bitcount+bit_index] = 1;
+			bit_index++;
+		}
+	}
+	unsigned int bitword;
+	for (int ii = 0; ii < 16; ii++) {
+		for (int jj = 0; jj < 32; jj++) {
+			bitword = ( bitword << 1 ) | ( obits[ii * 32 + jj] & 1 );
+		}
+		printf("%08x ", bitword);
+	}
+	printf("\n");
+	for (int ii = 0; ii < 16; ii++) {
+		for (int jj = 0; jj < 32; jj++) {
+			bitword = ( bitword << 1 ) | ( omask[ii * 32 + jj] & 1 );
+		}
+		printf("%08x ", bitword);
+	}
+	printf("\n");
+#endif
 	//		bitsprintf("%1d", ((bits->vlc[ii].i_bits >> jj) & 1));
-//	}
-//}
+    //	}
+    //}
 //printf("\n");
 
 

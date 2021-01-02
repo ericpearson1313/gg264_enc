@@ -5,9 +5,24 @@
 
 
 FILE* db_fp;
-
+//#define LOG_DEBLOCK
+#ifdef LOG_DEBLOCK
+#define LogOutput( b, dir ) { fprintf(db_fp, "2\n%x ", (dir)); for (int ii = 0; ii < 16; ii++) fprintf(db_fp, "%02x ", (b)->d[ii] & 0xff); fprintf(db_fp, "\n"); }
+#define LogInput( b, cidx, bidx ) { fprintf(db_fp, "3\n%x %x %x ", (cidx), (bidx), (b)->nz); for (int ii = 0; ii < 16; ii++) fprintf(db_fp, "%02x ", (b)->d[ii] & 0xff); fprintf(db_fp, "\n"); }
+#define LogStep() { fprintf(db_fp, "4\n"); } 
+#define LogMblock( ) { fprintf(db_fp, "1\n%x %x %x %x %x %x %x\n", mbx, mby, qp, mb_type, refidx, 0, 0); }
 #define LogFrame() { db_fp = fopen("deblock_test.txt", "w"); fprintf(db_fp, "0\n%x %x %x %x %x\n", disable_deblock_filter_idc, filterOffsetA, filterOffsetB, mb_width-1, mb_height-1); }
 #define LogClose() { fclose(db_fp); }
+#else
+#define LogOutput( b, dir ) {}
+#define LogInput( b, cidx, bidx ) {}
+#define LogStep() {} 
+#define LogMblock( ) {}
+#define LogFrame() {}
+#define LogClose() {}
+#endif
+
+
 
 // Init frame deblocking structure
 void gg_deblock_init(DeblockCtx* dbp, int disable_deblock_filter_idc, int filterOffsetA, int filterOffsetB, int mb_width, int mb_height ) {
@@ -244,14 +259,6 @@ void deblock_y4(DeblockCtx* dbp, int bidx, int vert_flag, BlkInfo* q_blk, BlkInf
 	}
 }
 
-//#define LogOutput( b, d ) {}
-//#define LogInput( b, cidx, bidx ) {}
-//#define LogStep() {} 
-
-#define LogOutput( b, dir ) { fprintf(db_fp, "2\n%x ", (dir)); for (int ii = 0; ii < 16; ii++) fprintf(db_fp, "%02x ", (b)->d[ii] & 0xff); fprintf(db_fp, "\n"); }
-#define LogInput( b, cidx, bidx ) { fprintf(db_fp, "3\n%x %x %x ", (cidx), (bidx), (b)->nz); for (int ii = 0; ii < 16; ii++) fprintf(db_fp, "%02x ", (b)->d[ii] & 0xff); fprintf(db_fp, "\n"); }
-#define LogStep() { fprintf(db_fp, "4\n"); } 
-#define LogMblock( ) { fprintf(db_fp, "1\n%x %x %x %x %x %x %x\n", mbx, mby, qp, mb_type, refidx, 0, 0); }
 
 
 #define WriteBlkY(r, x, y, b) { for (int py = 0; py < 4; py++) for (int px = 0; px < 4; px++) \
