@@ -24,6 +24,7 @@ module testbench_lattice(
 
     );
     
+    parameter WID = 48;
     //////////////////////
     // Let there be Clock!
     //////////////////////
@@ -36,37 +37,26 @@ module testbench_lattice(
         end 
     end
     
-    logic reset;
-    initial begin
-        reset = 1'b1;
-        @(posedge clk);
-        @(posedge clk);
-        @(posedge clk);
-        @(posedge clk);
-        @(posedge clk);
-        reset = 1'b0;
-    end
-
     ////////////////////
     //
     //   D  U  T
     //
     ///////////////////
     
+    logic reset; // clear flops, leave asserted for async operation    
+    logic [WID-1:0] bits; // bitstream, bit endian packed
+    logic [WID-1:0] bend; // a single 1-hot bit indicating block end
+    logic [WID-1:0][5:0] nc_idx; // coeff_token table index, {0-3} luma, {4} chroma DC
+    logic [31:0] pad;
     
-    logic [47:0] bits; // bitstream, bit endian packed
-    logic [47:0] bend; // a single 1-hot bit indicating block end
-    logic [4:0] nc_idx; // coeff_token table index, {0-3} luma, {4} chroma DC
-    logic ac_flag; // Set to indicate an AC block (for chroma) with max 15 coeffs
-
-    gg_parse_lattice #( 48 ) _lattice_dut
+    gg_parse_lattice #( WID ) _lattice_dut
     (
         .clk( clk ),
         .reset ( reset ),
         .in_bits( bits ),
+        .in_pad( pad ),
         .end_bits( bend ),
-        .nc_idx ( nc_idx ),
-        .ac_flag ( ac_flag )
+        .nc_idx ( nc_idx )
     );
 
     logic [0:25][6+9+64-1:0] vlc_mb_vec;
@@ -102,28 +92,31 @@ module testbench_lattice(
         };  
 
 
-
-
+    logic [639:0] bit_vec;
+    logic [639:0] end_vec;
+    logic [639:0][5:0] nc_vec;
 
 
     initial begin
     
+        // Reset (asserted for combinatorial operation)
+        
+        reset = 1;
         // Clear inputs
         bits = 0;
         nc_idx = 0;
-        ac_flag = 0;
+        pad = 0;
         
         // startup delay (for future reset)
         for( int ii = 0; ii < 10; ii++ ) @(posedge clk); // 10 cycles
 
         // Test case
         bits = { 30'b00000111_0000000001_00000101_110_0, 2'b00, 16'b0 };
-        nc_idx[0] = 1'b1;
+        nc_idx[WID-1][0] = 1'b1;
         for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
 
         bits = 0;
-        nc_idx = 0;
-        ac_flag = 0;
+        nc_idx[WID-1] = 0;
         for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
 
         // Full MB of blocks
@@ -133,14 +126,62 @@ module testbench_lattice(
             for( int ii = 0; ii < len; ii++ ) begin
                 bits[47-ii] = vlc_mb_vec[blk][len-1-ii];
             end
-            { ac_flag, nc_idx } =  vlc_mb_vec[blk][78:73];  
+            nc_idx[WID-1] =  vlc_mb_vec[blk][78:73];  
             @(negedge clk);
-            if( len > 47 ) 
+            if( len >= WID ) 
                 $write("TEST ERROR: length [%0d] too long %0d\n", blk, len );
-            else if( bend[47-len] != 1'b1 )
+            else if( bend[WID-1-len] != 1'b1 )
                 $write("ERROR: lattice mismatch blk[%0d], expected %d, Bend bits %0h\n", blk, len, bend );
             @(posedge clk);
         end // blk            
+        // End delay for waveforms
+        for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
+        
+        $write("**************************************\n");
+        $write("**          VECTOR TEST             **\n");
+        $write("**************************************\n");
+        
+        bit_vec = 0;
+        end_vec = 0;
+        nc_vec = 0;
+        reset = 1;
+       
+        // Load the vectors from the table of 26 transform blocks
+        begin
+            int pos;
+            int len;
+            pos = 639;
+            for( int bb = 0; bb < 26; bb++ ) begin
+                nc_vec[pos] = vlc_mb_vec[bb][78:73];
+                len = vlc_mb_vec[bb][72:64];
+                for( int ii = 0; ii < len; ii++ ) begin
+                    bit_vec[pos--] = vlc_mb_vec[bb][len-1-ii];
+                end // ii  
+                end_vec[pos] = 1'b1;
+            end // bb
+        end
+        
+        // Do 12 cycles of 48 bits each
+
+        for( int cyc = 0; cyc < 12; cyc++ ) begin
+            reset = 0;
+            bits[47:0] = bit_vec[639-48*cyc-:48];
+            pad[31:0] = bit_vec[639-48*cyc-48-:32];
+            nc_idx[47:0] = nc_vec[639-48*cyc-:48];
+            @(negedge clk);
+                if( bend[47:0] != end_vec[639-48*cyc-:48] ) begin
+                    $write("ERROR: lattice mismatch cyc[%0d], expected %0h, end bits %0h\n", cyc, end_vec[639-48*cyc-:48], bend ); 
+                end else begin
+                    $write("                        cyc[%0d], expected %0h, end bits %0h\n", cyc, end_vec[639-48*cyc-:48], bend ); 
+                end             
+            @(posedge clk);
+        end                
+        reset = 1;
+        bits = 0;
+        nc_idx = 0;
+        
+
+
         // End delay for waveforms
         for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
 

@@ -27,9 +27,9 @@ module gg_parse_lattice
     input  logic clk,
     input  logic reset,
     input  logic [WIDTH-1:0] in_bits, // bitstream, bit endian packed
+    input  logic [31:0]      in_pad, // Lookahead of 32 bits
     output logic [WIDTH-1:0] end_bits, // a single 1-hot bit indicating block end
-    input  logic [4:0] nc_idx, // coeff_token table index, {0-3} luma, {4} chroma DC
-    input  logic ac_flag // Set to indicate an AC block (for chroma) with max 15 coeffs
+    input  logic [WIDTH-1:0][5:0] nc_idx // coeff_token table index, {0-3} luma, {4} chroma DC, bit 5 = ac_flag
     );
 
 
@@ -38,10 +38,13 @@ module gg_parse_lattice
       
     logic [WIDTH+31:0][1:15]          s_total_zeros_y;  // luma total_zeros state [num_coeff]
     logic [WIDTH+31:0][1:3 ]          s_total_zeros_ch; // chroma dc total_zeros state [num_coeff]
+    logic       [31:0][1:15]          s_total_zeros_y_reg;  
+    logic       [31:0][1:3 ]          s_total_zeros_ch_reg; 
     logic [WIDTH+31:0][1:15][115:0] arc_total_zeros_y;  
     logic [WIDTH+31:0][1:3 ][80:0]  arc_total_zeros_ch; 
     
     logic [WIDTH+31:0][2:15][1:14]         s_run_before; // state s_run_before [num_coeff][zeros_left]
+    logic       [31:0][2:15][1:14]         s_run_before_reg; 
     logic [WIDTH+31:0][1:15][0:14][15:0] arc_run_before; 
     logic [WIDTH+31:0][1:14][0:14]           run_before; // decoded run befors
     static logic      [1:14][0:14][3:0]      run_before_len = { // static table of run before lengths 
@@ -65,33 +68,23 @@ module gg_parse_lattice
     logic [WIDTH+31:0][0:15]                      level_prefix;
     logic [WIDTH+31:0][1:16][1:16][0:6]         s_level_y;  // Luma Level State [num_coeff][coeff_remaining][suflen], num_coeff={16,17} if maxcoeff==num_coeff=={15,16}
     logic [WIDTH+31:0][1:4 ][1:4 ][0:6]         s_level_ch; // chroma dc Level State [num_coeff][coeff_remaining][suffix_len
+    logic       [31:0][1:16][1:16][0:6]         s_level_y_reg;  // Luma Level State [num_coeff][coeff_remaining][suflen], num_coeff={16,17} if maxcoeff==num_coeff=={15,16}
+    logic       [31:0][1:4 ][1:4 ][0:6]         s_level_ch_reg; // chroma dc Level State [num_coeff][coeff_remaining][suffix_len
     logic [WIDTH+31:0][1:16][1:16][0:6][28:0] arc_level_y;
     logic [WIDTH+31:0][1:4 ][1:4 ][0:6][28:0] arc_level_ch; // [num_coeff][coeff_remaining][arc_id]
     
     logic [WIDTH+31:0][  4:0] arc_coeff_token_last; // [arc_id] 0-4 coeff token
-    logic [WIDTH+31:0][111:0] arc_level_last_y; // arc from coeff is max for 4,15,16 and no zeros.
-    logic [WIDTH+31:0][ 79:0] arc_level_last_ch; // arc from coeff is max for 4,15,16 and no zeros.
-    logic [WIDTH+31:0][31:0] arc_total_zeros_last_y; // arc from total_zeros with num_coeff=1 or total_zeros=0
-    logic [WIDTH+31:0][31:0] arc_total_zeros_last_ch; // arc from total_zeros with num_coeff=1 or total_zeros=0
-    logic [WIDTH+31:0][15:0] arc_run_before_last; // arc from total_zeros with num_coeff=1 or total_zeros=0
-    
+    logic [WIDTH+31:0][111:0]       arc_level_last_y; // arc from coeff is max for 4,15,16 and no zeros.
+    logic [WIDTH+31:0][ 79:0]       arc_level_last_ch; // arc from coeff is max for 4,15,16 and no zeros.
+    logic [WIDTH+31:0][31:0]  arc_total_zeros_last_y; // arc from total_zeros with num_coeff=1 or total_zeros=0
+    logic [WIDTH+31:0][31:0]  arc_total_zeros_last_ch; // arc from total_zeros with num_coeff=1 or total_zeros=0
+    logic [WIDTH+31:0][15:0]   arc_run_before_last; // arc from total_zeros with num_coeff=1 or total_zeros=0
+    logic [WIDTH+31:0]                      s_last;     
+    logic       [31:0]                      s_last_reg;     
     logic [WIDTH+31:0] bits;
     
-    assign bits = { in_bits, 32'b0 };
+    assign bits = { in_bits, in_pad };
     
-     logic [9:0] probe;
-     assign probe[0] = s_coeff_token[63][0];
-     assign probe[1] = |arc_level_y[55][2][2][0];
-     assign probe[2] = s_level_y[55][2][2][0]; 
-     assign probe[3] = |arc_level_y[45][2][1][2]; 
-     assign probe[4] = s_level_y[45][2][1][2];
-     assign probe[5] = |arc_total_zeros_y[37][2];
-     assign probe[6] = s_total_zeros_y[37][2];
-     assign probe[7] = |arc_run_before[34][2][1];
-     assign probe[8] = s_run_before[34][2][1];
-     assign probe[9] = |arc_run_before_last[33];
-
-      
     // Loop Over bitpositions 
     always_comb begin : _lattice_array
         // Clear last arcs
@@ -122,11 +115,11 @@ module gg_parse_lattice
         level_prefix = 0;
         
         // Set state
-        s_coeff_token[WIDTH-1+32] = { ac_flag, nc_idx[4:0] };
 
         for( int bp = WIDTH-1+32; bp >= 32; bp-- ) begin : _lattice_col
             
             // set control inputs
+            s_coeff_token[bp] = nc_idx[bp-32];
             
             // Coeff Token + Trailing Ones
             begin : _coeff_token
@@ -492,7 +485,7 @@ module gg_parse_lattice
                             for( int lp = 0; lp < 16; lp++ ) begin // Level Prefix
                                 int dt;
                                 // Luma Merge arcs (reduction OR) 
-                                s_level_y[bp][nc][nr][sl] = |arc_level_y[bp][nc][nr][sl];
+                                s_level_y[bp][nc][nr][sl] = |arc_level_y[bp][nc][nr][sl] | ((bp >= WIDTH) ? s_level_y_reg[bp-WIDTH][nc][nr][sl] : 1'b0 );
                                 // bit offset 
                                 dt = lp + 1 + ( ( lp == 15 ) ? 12 : ( lp == 14 && sl == 0 ) ? 4 : sl );
                                 // Luma Arc to destination (1:1 fixed mapping)
@@ -508,7 +501,7 @@ module gg_parse_lattice
                             // Chroma
                                 if( nc <= 4 ) begin
                                     // Merge arcs (reduction OR) 
-                                    s_level_ch[bp][nc][nr][sl] = |arc_level_ch[bp][nc][nr][sl];
+                                    s_level_ch[bp][nc][nr][sl] = |arc_level_ch[bp][nc][nr][sl] | ((bp >= WIDTH) ? s_level_ch_reg[bp-WIDTH][nc][nr][sl] : 1'b0 );
                                     // Chroma Arc destinations (1:1 fixed mapping)
                                     if(      nr == 1 && nc == 4                   ) begin arc_level_last_ch[bp-dt][sl*16+lp]         = level_prefix[bp][lp] & s_level_ch[bp][nc][nr][sl]; end // no zeros, Map to last                               
                                     else if( nr == 1                              ) begin arc_total_zeros_ch[bp-dt][nc][lp+sl*16+1]  = level_prefix[bp][lp] & s_level_ch[bp][nc][nr][sl]; end // map to total zeros table
@@ -529,8 +522,8 @@ module gg_parse_lattice
             // Total Zeros 
             begin : _total_zeros
                 // s_total_zero merge ( reduction OR )
-                for( int nc = 1; nc < 16; nc++ ) begin s_total_zeros_y[bp][nc] =  |arc_total_zeros_y[bp][nc]; end // nc
-                for( int nc = 1; nc < 4 ; nc++ ) begin s_total_zeros_ch[bp][nc] = |arc_total_zeros_ch[bp][nc]; end // nc
+                for( int nc = 1; nc < 16; nc++ ) begin s_total_zeros_y[bp][nc] =  |arc_total_zeros_y[bp][nc] | ((bp >= WIDTH) ? s_total_zeros_y_reg[bp-WIDTH][nc] : 1'b0 ); end // nc
+                for( int nc = 1; nc < 4 ; nc++ ) begin s_total_zeros_ch[bp][nc] = |arc_total_zeros_ch[bp][nc] | ((bp >= WIDTH) ? s_total_zeros_ch_reg[bp-WIDTH][nc] : 1'b0 ); end // nc
                 // Decode Logic
                 // Last : Transition to arc_last if a transition to total_zeros == 0 
                 // Last : End of line arc_last when num_coeff == 1, remaining zeros applied
@@ -811,7 +804,7 @@ module gg_parse_lattice
                 for( int nr = 2; nr <= 15; nr++ ) begin // Num coeff remaining Remainings
                     for( int nz = 1; nz < (16-nr); nz++ ) begin // zeros left
                         // Merge run_before arcs (Reduction OR)
-                        s_run_before[bp][nr][nz] = |arc_run_before[bp][nr][nz];
+                        s_run_before[bp][nr][nz] = |arc_run_before[bp][nr][nz] | ((bp >= WIDTH) ? s_run_before_reg[bp-WIDTH][nr][nz] : 1'b0 );
                         for( int rb = 0; rb <= nz; rb++ ) begin // run before
                         // RunBefore[nr-1][zl-run_before] transition=                        
                             arc_run_before[bp-run_before_len[nz][rb]][nr-1][nz-rb][rb+2] = s_run_before[bp][nr][nz] & run_before[bp][nz][rb];
@@ -828,17 +821,79 @@ module gg_parse_lattice
                 end
             end // _run_before
 
+            // handle low run_before arcs
+            for( int bp = 31; bp >= 0; bp-- ) begin
+                    // Handle Last case with NR=1 (Reduction OR)
+                arc_run_before_last[bp][0] = |arc_run_before[bp][1];
+
+                // Handle Last case with ZL=0
+                for( int nr = 2; nr < 15; nr++ ) begin
+                    arc_run_before_last[bp][nr-1] = |arc_run_before[bp][nr][0];
+            end
+        end
+
+
+
+
             // Process last state
             begin : _process_last            
                 // Last arc merge (reduction ORs) to flag last bit of a transform block
-                end_bits[bp-32] = ( |arc_coeff_token_last[bp]    ) | 
+                s_last[bp]    = ( |arc_coeff_token_last[bp]    ) | 
+                                ( |arc_level_last_y[bp]        ) | 
+                                ( |arc_level_last_ch[bp]       ) | 
+                                ( |arc_total_zeros_last_y[bp]  ) | 
+                                ( |arc_total_zeros_last_ch[bp] ) | 
+                                ( |arc_run_before_last[bp]     ) |
+                                ((bp >= WIDTH) ? s_last_reg[bp-WIDTH] : 1'b0 );
+            end // _process_last
+        end // bp
+    end // lattice array
+   
+    assign end_bits[WIDTH-1:0] = s_last[WIDTH+32-1:32];
+    
+    always_ff @(posedge clk) begin // Lower 32 set of states are flopped  
+        if( reset ) begin
+            for( int bp = 31; bp >= 0; bp-- ) begin
+                s_total_zeros_y_reg[bp]  <= 0;
+                s_total_zeros_ch_reg[bp] <= 0;
+                s_level_y_reg[bp]        <= 0;
+                s_level_ch_reg[bp]       <= 0;
+                s_run_before_reg[bp]     <= 0;
+                s_last_reg[bp]           <= 0;
+            end
+        end else begin
+            for( int bp = 31; bp >= 0; bp-- ) begin
+                for( int nc = 1; nc < 16; nc++ ) begin 
+                    s_total_zeros_y_reg[bp][nc] <=  |arc_total_zeros_y[bp][nc]; 
+                end // nc
+                for( int nc = 1; nc < 4 ; nc++ ) begin 
+                    s_total_zeros_ch_reg[bp][nc] <= |arc_total_zeros_ch[bp][nc]; 
+                end // nc
+                for( int nc = 1; nc <= 16; nc++ ) begin // Num Coeff
+                    for( int nr = 1; nr <= nc; nr++ ) begin // Num Remainings
+                        for( int sl = 0; sl < 6 && sl <= nc-nr+1 ; sl++ ) begin // Suffix Length
+                            for( int lp = 0; lp < 16; lp++ ) begin // Level Prefix
+                                s_level_y_reg[bp][nc][nr][sl] <= |arc_level_y[bp][nc][nr][sl];
+                                if( nc <= 4 ) begin
+                                    s_level_ch_reg[bp][nc][nr][sl] <= |arc_level_ch[bp][nc][nr][sl];
+                                end
+                            end
+                        end
+                    end
+                end
+                for( int nr = 2; nr <= 15; nr++ ) begin // Num coeff remaining Remainings
+                    for( int nz = 1; nz < (16-nr); nz++ ) begin // zeros left
+                        s_run_before_reg[bp][nr][nz] <= |arc_run_before[bp][nr][nz];
+                    end
+                end
+                s_last_reg[bp] <= ( |arc_coeff_token_last[bp]    ) | 
                                   ( |arc_level_last_y[bp]        ) | 
                                   ( |arc_level_last_ch[bp]       ) | 
                                   ( |arc_total_zeros_last_y[bp]  ) | 
                                   ( |arc_total_zeros_last_ch[bp] ) | 
                                   ( |arc_run_before_last[bp]     ) ;
-            end // _process_last
-        end // bp
-    end // lattice array
+            end
+        end
+    end // ff
 endmodule
  
