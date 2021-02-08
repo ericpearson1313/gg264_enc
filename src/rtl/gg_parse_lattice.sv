@@ -16,6 +16,7 @@
 // IN THE SOFTWARE.
 //
 
+
 // Decode process a transform block
 // Input: bitstream, block predictor, qpy,  and block index
 // Output: recon, bitcount
@@ -831,9 +832,6 @@ module gg_parse_lattice
                     arc_run_before_last[bp][nr-1] = |arc_run_before[bp][nr][0];
             end
         end
-
-
-
 
             // Process last state
             begin : _process_last            

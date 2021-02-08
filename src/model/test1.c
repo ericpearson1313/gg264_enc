@@ -19,7 +19,7 @@ int mb_height = PIC_HEIGHT>>4;
 
 // Parameters 
 int disable_deblocking_filter_idc = 1; // 0-enable, 1-disable, 2-disable across slices boundaries
-int pintra_disable_deblocking_filter_idc = 0; // pintra frames :0-enable, 1-disable, 2-disable across slices boundaries
+int pintra_disable_deblocking_filter_idc = 1; // pintra frames :0-enable, 1-disable, 2-disable across slices boundaries
 int filterOffsetA = 0;
 int filterOffsetB = 0;
 
@@ -934,6 +934,7 @@ void recon_copy_to_ref(int refidx)
 
 int main( int argc, int **argv )
 {
+    int qp = 29;
     test_run_before();
    
     printf("argc %d\n", argc);
@@ -971,7 +972,7 @@ int main( int argc, int **argv )
         ggo_sequence_parameter_set();
         ggo_picture_parameter_set();
         ggi_read_frame();
-        ggo_inter_0_0_slice(29, 0, 5); // pintra refresh cols
+        ggo_inter_0_0_slice(qp, 0, 5); // pintra refresh cols
         recon_write_yuv();
         recon_copy_to_ref(0);
     }
@@ -981,7 +982,7 @@ int main( int argc, int **argv )
         ggo_sequence_parameter_set();
         ggo_picture_parameter_set();
         ggi_read_frame();
-        ggo_inter_0_0_slice(29, 1, 0);
+        ggo_inter_0_0_slice(qp, 1, 0);
         recon_write_yuv();
         recon_copy_to_ref(0);
     }
