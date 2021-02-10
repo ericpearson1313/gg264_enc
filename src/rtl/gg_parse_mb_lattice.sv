@@ -66,20 +66,26 @@ module gg_parse_lattice_macroblock
     parameter MB_SYNTAX_DELTA_QP   = 12;
 
     parameter MB_SYNTAX_RESIDUAL   = 13;    
+    parameter MB_SYNTAX_COUNT      = 14;
 
  
 
     logic [WIDTH+31:0][0:13]           s_mb_syntax; // macroblock syntax elements 
+    logic       [31:0][0:13]           s_mb_syntax_reg; // macroblock syntax elements 
     logic [WIDTH+31:0][0:13][0:31]   arc_mb_syntax; // [syntax element][ue/se prefix length] 
    
     logic [WIDTH+31:0][5:0]          coded_block_pattern;
     logic [WIDTH+31:0][0:7][4:0]     num_coeff_left;
     logic [WIDTH+31:0][0:7][4:0]     num_coeff_above;
+    logic      [31:31][5:0]          coded_block_pattern_reg;
+    logic      [31:31][0:7][4:0]     num_coeff_left_reg;
+    logic      [31:31][0:7][4:0]     num_coeff_above_reg;
     logic [WIDTH+31:0][5:0]          num_coeff_idx;
     
     logic [WIDTH+31:0][0:4]            s_blk_zero;  // Skip State to bypass a set of states
     logic [WIDTH+31:0][0:25]           s_blk_start;    
     logic [WIDTH+31:0][0:25]           s_blk_run;
+    logic      [31:31][0:25]           s_blk_run_reg;
  
     logic [WIDTH+31:0][0:7][4:0]        local_left;
     logic [WIDTH+31:0][0:7][4:0]        local_above;
@@ -94,7 +100,9 @@ module gg_parse_lattice_macroblock
     
     logic [WIDTH+31:0] bits;
     logic [WIDTH+31:0] blk_end_flag;
+    logic [WIDTH+31:0] mb_start_flag;
     
+    assign mb_start_flag = { mb_start, 32'b0 };
     assign blk_end_flag = { blk_end, 32'b0 };
     assign bits = { in_bits, in_pad };
 
@@ -128,32 +136,34 @@ module gg_parse_lattice_macroblock
         nc = 0;;
        
         
-        // Set starting neighbourhood state ( _HACK_ _
-        num_coeff_left[ WIDTH-1+31] = nc_left;
-        num_coeff_above[WIDTH-1+31] = nc_above; 
+        // Set starting neighbourhood state from trailing registers
+        num_coeff_left[     WIDTH-1+32] = num_coeff_left_reg[     31];
+        num_coeff_above[    WIDTH-1+32] = num_coeff_above_reg[    31]; 
+        coded_block_pattern[WIDTH-1+32] = coded_block_pattern_reg[31];
+        s_blk_run[          WIDTH-1+32] = s_blk_run_reg[          31];
 
-        // Loop through all bits
+        // Instantiate unqiue hardware for each bit of the input
         for( int bp = WIDTH-1+32; bp >= 32; bp-- ) begin : _lattice_col
 
             begin : _mbtype // Just decode the few used: 0, 1, 2, 30 
-                 if( bits[bp-:1 ]== 1'b1                ) arc_mb_syntax[bp-1][MB_SYNTAX_P16x16_REF][0]  =  mb_start[bp-32]; // 0 - P16x16
-                 if( bits[bp-:2 ]== 2'b01                ) arc_mb_syntax[bp-3][MB_SYNTAX_P16x8_REF0][0]  =  mb_start[bp-32]; // 1 - P16x8 and 2 - P8x16
-                 if( bits[bp-:9 ]== 9'b00001111         ) arc_mb_syntax[((bp-9)/8)*8][MB_SYNTAX_PCM_ALIGN][(bp-9)%8] = mb_start[bp-32]; // 30 - PCM
+                 if( bits[bp-:1 ]== 1'b1                ) arc_mb_syntax[bp-1][MB_SYNTAX_P16x16_REF][0]  =  mb_start_flag[bp]; // 0 - P16x16
+                 if( bits[bp-:2 ]== 2'b01                ) arc_mb_syntax[bp-3][MB_SYNTAX_P16x8_REF0][0]  =  mb_start_flag[bp]; // 1 - P16x8 and 2 - P8x16
+                 if( bits[bp-:9 ]== 9'b00001111         ) arc_mb_syntax[((bp-9)/8)*8][MB_SYNTAX_PCM_ALIGN][(bp-9)%8] = mb_start_flag[bp]; // 30 - PCM
             end // mb_type
            
             begin : _pcm_mb // TODO: handle PCM MBs 384 byte step, wrap registers
-                 s_mb_syntax[bp][MB_SYNTAX_PCM_ALIGN] = |arc_mb_syntax[bp][MB_SYNTAX_PCM_ALIGN]; // Reduction OR
+                 s_mb_syntax[bp][MB_SYNTAX_PCM_ALIGN] = |arc_mb_syntax[bp][MB_SYNTAX_PCM_ALIGN] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_PCM_ALIGN] : 1'b0 ); // Reduction OR
             //    arc_pcm_last[bp-3072] = s_mb_syntax[bp][MB_SYNTAX_PCM_ALIGN];
             end // pcm
             
             begin : _refidx // assume num_refidx_minus_1 == 0, so single bit only
-                 s_mb_syntax[bp][MB_SYNTAX_P16x16_REF] = |arc_mb_syntax[bp][MB_SYNTAX_P16x16_REF]; // Reduction OR
+                 s_mb_syntax[bp][MB_SYNTAX_P16x16_REF] = |arc_mb_syntax[bp][MB_SYNTAX_P16x16_REF] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x16_REF] : 1'b0 ); // Reduction OR
                  arc_mb_syntax[bp-1][MB_SYNTAX_P16x16_MVX][0] = s_mb_syntax[bp][MB_SYNTAX_P16x16_REF];   
                  
-                 s_mb_syntax[bp][MB_SYNTAX_P16x8_REF0] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_REF0]; // Reduction OR
+                 s_mb_syntax[bp][MB_SYNTAX_P16x8_REF0] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_REF0] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x8_REF0] : 1'b0 ); // Reduction OR
                  arc_mb_syntax[bp-1][MB_SYNTAX_P16x8_REF1][0] = s_mb_syntax[bp][MB_SYNTAX_P16x8_REF0];   
                  
-                 s_mb_syntax[bp][MB_SYNTAX_P16x8_REF1] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_REF1]; // Reduction OR
+                 s_mb_syntax[bp][MB_SYNTAX_P16x8_REF1] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_REF1] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x8_REF1] : 1'b0 ); // Reduction OR
                  arc_mb_syntax[bp-1][MB_SYNTAX_P16x8_MVX0][0] = s_mb_syntax[bp][MB_SYNTAX_P16x8_REF1];
             end
             
@@ -177,39 +187,39 @@ module gg_parse_lattice_macroblock
             end // ue prefix
 
             begin : _mb_syntax // All are UE/SE (assume max 15 prefix length
-                s_mb_syntax[bp][MB_SYNTAX_P16x16_MVX] = |arc_mb_syntax[bp][MB_SYNTAX_P16x16_MVX]; // Reduction OR
+                s_mb_syntax[bp][MB_SYNTAX_P16x16_MVX] = |arc_mb_syntax[bp][MB_SYNTAX_P16x16_MVX] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x16_MVX] : 1'b0 ); // Reduction OR
                 for( int pl=0; pl < 16; pl++ ) 
                     arc_mb_syntax[bp-(pl*2+1)][MB_SYNTAX_P16x16_MVY][pl] = ue_prefix[bp][pl] & s_mb_syntax[bp][MB_SYNTAX_P16x16_MVX];   
 
-                s_mb_syntax[bp][MB_SYNTAX_P16x16_MVY] = |arc_mb_syntax[bp][MB_SYNTAX_P16x16_MVY]; // Reduction OR
+                s_mb_syntax[bp][MB_SYNTAX_P16x16_MVY] = |arc_mb_syntax[bp][MB_SYNTAX_P16x16_MVY] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x16_MVY] : 1'b0 ); // Reduction OR
                 for( int pl=0; pl < 16; pl++ ) 
                     arc_mb_syntax[bp-(pl*2+1)][MB_SYNTAX_CBP       ][pl] = ue_prefix[bp][pl] & s_mb_syntax[bp][MB_SYNTAX_P16x16_MVY];
                     
-                s_mb_syntax[bp][MB_SYNTAX_P16x8_MVX0] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_MVX0]; // Reduction OR
+                s_mb_syntax[bp][MB_SYNTAX_P16x8_MVX0] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_MVX0] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x8_MVX0] : 1'b0 ); // Reduction OR
                 for( int pl=0; pl < 16; pl++ ) 
                     arc_mb_syntax[bp-(pl*2+1)][MB_SYNTAX_P16x8_MVY0][pl] = ue_prefix[bp][pl] & s_mb_syntax[bp][MB_SYNTAX_P16x8_MVX0];   
 
-                s_mb_syntax[bp][MB_SYNTAX_P16x8_MVY0] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_MVY0]; // Reduction OR
+                s_mb_syntax[bp][MB_SYNTAX_P16x8_MVY0] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_MVY0] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x8_MVY0] : 1'b0 ); // Reduction OR
                 for( int pl=0; pl < 16; pl++ ) 
                     arc_mb_syntax[bp-(pl*2+1)][MB_SYNTAX_P16x8_MVX1][pl] = ue_prefix[bp][pl] & s_mb_syntax[bp][MB_SYNTAX_P16x8_MVY0];   
                     
-                s_mb_syntax[bp][MB_SYNTAX_P16x8_MVX1] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_MVX1]; // Reduction OR
+                s_mb_syntax[bp][MB_SYNTAX_P16x8_MVX1] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_MVX1] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x8_MVX1] : 1'b0 ); // Reduction OR
                 for( int pl=0; pl < 16; pl++ ) 
                     arc_mb_syntax[bp-(pl*2+1)][MB_SYNTAX_P16x8_MVY1][pl] = ue_prefix[bp][pl] & s_mb_syntax[bp][MB_SYNTAX_P16x8_MVX1];  
                     
-                s_mb_syntax[bp][MB_SYNTAX_P16x8_MVY1] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_MVY1]; // Reduction OR
+                s_mb_syntax[bp][MB_SYNTAX_P16x8_MVY1] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_MVY1] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x8_MVY1] : 1'b0 ); // Reduction OR
                 for( int pl=0; pl < 16; pl++ ) 
                     arc_mb_syntax[bp-(pl*2+1)][MB_SYNTAX_CBP    ][pl+16] = ue_prefix[bp][pl] & s_mb_syntax[bp][MB_SYNTAX_P16x8_MVY1];    
                                     
-                s_mb_syntax[bp][MB_SYNTAX_CBP] = |arc_mb_syntax[bp][MB_SYNTAX_CBP]; // Reduction OR
+                s_mb_syntax[bp][MB_SYNTAX_CBP] = |arc_mb_syntax[bp][MB_SYNTAX_CBP] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_CBP] : 1'b0 ); // Reduction OR
                 for( int pl=0; pl < 16; pl++ ) 
                     arc_mb_syntax[bp-(pl*2+1)][MB_SYNTAX_DELTA_QP  ][pl] = ue_prefix[bp][pl] & s_mb_syntax[bp][MB_SYNTAX_CBP];   
                     
-                s_mb_syntax[bp][MB_SYNTAX_DELTA_QP] = |arc_mb_syntax[bp][MB_SYNTAX_DELTA_QP]; // Reduction OR
+                s_mb_syntax[bp][MB_SYNTAX_DELTA_QP] = |arc_mb_syntax[bp][MB_SYNTAX_DELTA_QP] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_DELTA_QP] : 1'b0 ); // Reduction OR
                 for( int pl=0; pl < 16; pl++ ) 
                     arc_mb_syntax[bp-(pl*2+1)][MB_SYNTAX_RESIDUAL  ][pl] = ue_prefix[bp][pl] & s_mb_syntax[bp][MB_SYNTAX_DELTA_QP];   
                     
-                s_mb_syntax[bp][MB_SYNTAX_RESIDUAL] = |arc_mb_syntax[bp][MB_SYNTAX_RESIDUAL]; // Reduction OR
+                s_mb_syntax[bp][MB_SYNTAX_RESIDUAL] = |arc_mb_syntax[bp][MB_SYNTAX_RESIDUAL] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_RESIDUAL] : 1'b0 ); // Reduction OR
             end // mv
 
             begin : _codec_block_pattern // if this is start of a CBP then decode it, otherwise forward CBP 
@@ -332,45 +342,44 @@ module gg_parse_lattice_macroblock
                 end
             end // residual
 
-     
             // nC above and left maintenance
             
             begin : _num_coeff_neighborhood 
                 // Zero out nc given block skip states
                 local_left[bp][0:1]  = ( s_blk_zero[bp][0] | s_blk_zero[bp][1] ) ? 10'b0 : num_coeff_left[bp][0:1];
                 local_left[bp][2:3]  = ( s_blk_zero[bp][2] | s_blk_zero[bp][3] ) ? 10'b0 : num_coeff_left[bp][2:3];
-                local_above[bp][0:1] = ( s_blk_zero[bp][0] | s_blk_zero[bp][2] ) ? 10'b0 : num_coeff_above[bp][0:1];
-                local_above[bp][2:3] = ( s_blk_zero[bp][1] | s_blk_zero[bp][3] ) ? 10'b0 : num_coeff_above[bp][2:3];
+                local_above[bp][0:1] = ( s_blk_zero[bp][0] | s_blk_zero[bp][2] ) ? 10'b0 : ( mb_start_flag[bp] ) ? nc_above[0:1] : num_coeff_above[bp][0:1];
+                local_above[bp][2:3] = ( s_blk_zero[bp][1] | s_blk_zero[bp][3] ) ? 10'b0 : ( mb_start_flag[bp] ) ? nc_above[2:3] : num_coeff_above[bp][2:3];
                 local_left[bp][4:7]  = ( s_blk_zero[bp][4] ) ? 20'b0 : num_coeff_left[bp][4:7];
-                local_above[bp][4:7] = ( s_blk_zero[bp][4] ) ? 20'b0 : num_coeff_above[bp][4:7];
+                local_above[bp][4:7] = ( s_blk_zero[bp][4] ) ? 20'b0 : ( mb_start_flag[bp] ) ? nc_above[4:7] : num_coeff_above[bp][4:7];
                     
                 // Calculate nC and nc_idx from nc data for given block
-                if( s_blk_start[bp][ 0] ) arc_nc_x2[bp][ 0] = ( left_oop & above_oop ) ? 0 : ( left_oop ) ? { local_above[bp][0], 1'b0 } : ( above_oop ) ? { local_left[bp][0], 1'b0 } : local_left[bp][0] + local_above[bp][0] + 1;
-                if( s_blk_start[bp][ 1] ) arc_nc_x2[bp][ 1] = ( above_oop ) ? { local_left[bp][0], 1'b0 } : local_left[bp][0] + local_above[bp][1] + 1;
-                if( s_blk_start[bp][ 2] ) arc_nc_x2[bp][ 2] = ( left_oop  ) ? { local_above[bp][0], 1'b0 } : local_left[bp][1] + local_above[bp][0] + 1;
-                if( s_blk_start[bp][ 3] ) arc_nc_x2[bp][ 3] = local_left[bp][1] + local_above[bp][1] + 1;
-                if( s_blk_start[bp][ 4] ) arc_nc_x2[bp][ 4] = ( above_oop ) ? { local_left[bp][0], 1'b0 } : local_left[bp][0] + local_above[bp][2] + 1;
-                if( s_blk_start[bp][ 5] ) arc_nc_x2[bp][ 5] = ( above_oop ) ? { local_left[bp][0], 1'b0 } : local_left[bp][0] + local_above[bp][3] + 1;
-                if( s_blk_start[bp][ 6] ) arc_nc_x2[bp][ 6] = local_left[bp][1] + local_above[bp][2] + 1;
-                if( s_blk_start[bp][ 7] ) arc_nc_x2[bp][ 7] = local_left[bp][1] + local_above[bp][3] + 1;
-                if( s_blk_start[bp][ 8] ) arc_nc_x2[bp][ 8] = ( left_oop ) ? { local_above[bp][0], 1'b0 } : local_left[bp][2] + local_above[bp][0] + 1;
-                if( s_blk_start[bp][ 9] ) arc_nc_x2[bp][ 9] = local_left[bp][2] + local_above[bp][1] + 1;
-                if( s_blk_start[bp][10] ) arc_nc_x2[bp][10] = ( left_oop ) ? { local_above[bp][0], 1'b0 } : local_left[bp][3] + local_above[bp][0] + 1;
-                if( s_blk_start[bp][11] ) arc_nc_x2[bp][11] = local_left[bp][3] + local_above[bp][1] + 1;
-                if( s_blk_start[bp][12] ) arc_nc_x2[bp][12] = local_left[bp][2] + local_above[bp][2] + 1;
-                if( s_blk_start[bp][13] ) arc_nc_x2[bp][13] = local_left[bp][2] + local_above[bp][3] + 1;
-                if( s_blk_start[bp][14] ) arc_nc_x2[bp][14] = local_left[bp][3] + local_above[bp][2] + 1;
-                if( s_blk_start[bp][15] ) arc_nc_x2[bp][15] = local_left[bp][3] + local_above[bp][3] + 1;
-                if( s_blk_start[bp][16] ) arc_nc_x2[bp][16] = 8'h40;
-                if( s_blk_start[bp][17] ) arc_nc_x2[bp][17] = 8'h40;
-                if( s_blk_start[bp][18] ) arc_nc_x2[bp][18] = 8'h80 | (( left_oop & above_oop ) ? 0 : ( left_oop ) ? { local_above[bp][4], 1'b0 } : ( above_oop ) ? { local_left[bp][4], 1'b0 } : local_left[bp][4] + local_above[bp][4] + 1);
-                if( s_blk_start[bp][19] ) arc_nc_x2[bp][19] = 8'h80 | (( above_oop ) ? { local_left[bp][4], 1'b0 } : local_left[bp][4] + local_above[bp][5] + 1);
-                if( s_blk_start[bp][20] ) arc_nc_x2[bp][20] = 8'h80 | (( left_oop  ) ? { local_above[bp][4], 1'b0 } : local_left[bp][5] + local_above[bp][4] + 1);
-                if( s_blk_start[bp][21] ) arc_nc_x2[bp][21] = 8'h80 | (local_left[bp][5] + local_above[bp][5] + 1);
-                if( s_blk_start[bp][22] ) arc_nc_x2[bp][22] = 8'h80 | (( left_oop & above_oop ) ? 0 : ( left_oop ) ? { local_above[bp][6], 1'b0 } : ( above_oop ) ? { local_left[bp][6], 1'b0 } : local_left[bp][6] + local_above[bp][6] + 1);
-                if( s_blk_start[bp][23] ) arc_nc_x2[bp][23] = 8'h80 | (( above_oop ) ? { local_left[bp][6], 1'b0 } : local_left[bp][6] + local_above[bp][7] + 1);
-                if( s_blk_start[bp][24] ) arc_nc_x2[bp][24] = 8'h80 | (( left_oop  ) ? { local_above[bp][6], 1'b0 } : local_left[bp][7] + local_above[bp][6] + 1);
-                if( s_blk_start[bp][25] ) arc_nc_x2[bp][25] = 8'h80 | (local_left[bp][7] + local_above[bp][7] + 1);
+                arc_nc_x2[bp][ 0] = {8{s_blk_start[bp][ 0]}} & ( ( left_oop & above_oop ) ? 0 : ( left_oop ) ? { local_above[bp][0], 1'b0 } : ( above_oop ) ? { local_left[bp][0], 1'b0 } : local_left[bp][0] + local_above[bp][0] + 1 );
+                arc_nc_x2[bp][ 1] = {8{s_blk_start[bp][ 1]}} & ( ( above_oop ) ? { local_left[bp][0], 1'b0 } : local_left[bp][0] + local_above[bp][1] + 1 );
+                arc_nc_x2[bp][ 2] = {8{s_blk_start[bp][ 2]}} & ( ( left_oop  ) ? { local_above[bp][0], 1'b0 } : local_left[bp][1] + local_above[bp][0] + 1 );
+                arc_nc_x2[bp][ 3] = {8{s_blk_start[bp][ 3]}} & ( local_left[bp][1] + local_above[bp][1] + 1 );
+                arc_nc_x2[bp][ 4] = {8{s_blk_start[bp][ 4]}} & ( ( above_oop ) ? { local_left[bp][0], 1'b0 } : local_left[bp][0] + local_above[bp][2] + 1 );
+                arc_nc_x2[bp][ 5] = {8{s_blk_start[bp][ 5]}} & ( ( above_oop ) ? { local_left[bp][0], 1'b0 } : local_left[bp][0] + local_above[bp][3] + 1 );
+                arc_nc_x2[bp][ 6] = {8{s_blk_start[bp][ 6]}} & ( local_left[bp][1] + local_above[bp][2] + 1 );
+                arc_nc_x2[bp][ 7] = {8{s_blk_start[bp][ 7]}} & ( local_left[bp][1] + local_above[bp][3] + 1 );
+                arc_nc_x2[bp][ 8] = {8{s_blk_start[bp][ 8]}} & ( ( left_oop ) ? { local_above[bp][0], 1'b0 } : local_left[bp][2] + local_above[bp][0] + 1 );
+                arc_nc_x2[bp][ 9] = {8{s_blk_start[bp][ 9]}} & ( local_left[bp][2] + local_above[bp][1] + 1 );
+                arc_nc_x2[bp][10] = {8{s_blk_start[bp][10]}} & ( ( left_oop ) ? { local_above[bp][0], 1'b0 } : local_left[bp][3] + local_above[bp][0] + 1 );
+                arc_nc_x2[bp][11] = {8{s_blk_start[bp][11]}} & ( local_left[bp][3] + local_above[bp][1] + 1 );
+                arc_nc_x2[bp][12] = {8{s_blk_start[bp][12]}} & ( local_left[bp][2] + local_above[bp][2] + 1 );
+                arc_nc_x2[bp][13] = {8{s_blk_start[bp][13]}} & ( local_left[bp][2] + local_above[bp][3] + 1 );
+                arc_nc_x2[bp][14] = {8{s_blk_start[bp][14]}} & ( local_left[bp][3] + local_above[bp][2] + 1 );
+                arc_nc_x2[bp][15] = {8{s_blk_start[bp][15]}} & ( local_left[bp][3] + local_above[bp][3] + 1 );
+                arc_nc_x2[bp][16] = {8{s_blk_start[bp][16]}} & ( 8'h40 );
+                arc_nc_x2[bp][17] = {8{s_blk_start[bp][17]}} & ( 8'h40 );
+                arc_nc_x2[bp][18] = {8{s_blk_start[bp][18]}} & ( 8'h80 | (( left_oop & above_oop ) ? 0 : ( left_oop ) ? { local_above[bp][4], 1'b0 } : ( above_oop ) ? { local_left[bp][4], 1'b0 } : local_left[bp][4] + local_above[bp][4] + 1) );
+                arc_nc_x2[bp][19] = {8{s_blk_start[bp][19]}} & ( 8'h80 | (( above_oop ) ? { local_left[bp][4], 1'b0 } : local_left[bp][4] + local_above[bp][5] + 1) );
+                arc_nc_x2[bp][20] = {8{s_blk_start[bp][20]}} & ( 8'h80 | (( left_oop  ) ? { local_above[bp][4], 1'b0 } : local_left[bp][5] + local_above[bp][4] + 1) );
+                arc_nc_x2[bp][21] = {8{s_blk_start[bp][21]}} & ( 8'h80 | (local_left[bp][5] + local_above[bp][5] + 1) );
+                arc_nc_x2[bp][22] = {8{s_blk_start[bp][22]}} & ( 8'h80 | (( left_oop & above_oop ) ? 0 : ( left_oop ) ? { local_above[bp][6], 1'b0 } : ( above_oop ) ? { local_left[bp][6], 1'b0 } : local_left[bp][6] + local_above[bp][6] + 1) );
+                arc_nc_x2[bp][23] = {8{s_blk_start[bp][23]}} & ( 8'h80 | (( above_oop ) ? { local_left[bp][6], 1'b0 } : local_left[bp][6] + local_above[bp][7] + 1) );
+                arc_nc_x2[bp][24] = {8{s_blk_start[bp][24]}} & ( 8'h80 | (( left_oop  ) ? { local_above[bp][6], 1'b0 } : local_left[bp][7] + local_above[bp][6] + 1) );
+                arc_nc_x2[bp][25] = {8{s_blk_start[bp][25]}} & ( 8'h80 | (local_left[bp][7] + local_above[bp][7] + 1) );
                 
                 nc_x2[bp] = arc_nc_x2[bp][ 0] | arc_nc_x2[bp][ 1] | arc_nc_x2[bp][ 2] | arc_nc_x2[bp][ 3] | arc_nc_x2[bp][ 4] |
                             arc_nc_x2[bp][ 5] | arc_nc_x2[bp][ 6] | arc_nc_x2[bp][ 7] | arc_nc_x2[bp][ 8] | arc_nc_x2[bp][ 9] |
@@ -640,16 +649,18 @@ module gg_parse_lattice_macroblock
                                      {5{num_coeff_idx[bp][2]}} & ( nc[bp][2][0] | nc[bp][2][1] |nc[bp][2][2] |nc[bp][2][3] |nc[bp][2][4] |nc[bp][2][5] |nc[bp][2][6] |nc[bp][2][7] |nc[bp][2][8] |nc[bp][2][9] |nc[bp][2][10] |nc[bp][2][11] |nc[bp][2][12] |nc[bp][2][13] |nc[bp][2][14] |nc[bp][2][15] |nc[bp][2][16] ) |
                                      {5{num_coeff_idx[bp][3]}} & ( nc[bp][3][0] | nc[bp][3][1] |nc[bp][3][2] |nc[bp][3][3] |nc[bp][3][4] |nc[bp][3][5] |nc[bp][3][6] |nc[bp][3][7] |nc[bp][3][8] |nc[bp][3][9] |nc[bp][3][10] |nc[bp][3][11] |nc[bp][3][12] |nc[bp][3][13] |nc[bp][3][14] |nc[bp][3][15] |nc[bp][3][16] ) ;
 
-                // Update NEXT neighbourhood based on immediate coeff token decode if start of a new blocks               
-                num_coeff_left[bp-1][0] = ( s_blk_start[bp][ 0] | s_blk_start[bp][ 1] | s_blk_start[bp][ 4] | s_blk_start[bp][ 5] ) ? num_coeff[bp] : local_left[bp][0];
-                num_coeff_left[bp-1][1] = ( s_blk_start[bp][ 2] | s_blk_start[bp][ 3] | s_blk_start[bp][ 6] | s_blk_start[bp][ 7] ) ? num_coeff[bp] : local_left[bp][1];
-                num_coeff_left[bp-1][2] = ( s_blk_start[bp][ 8] | s_blk_start[bp][ 9] | s_blk_start[bp][12] | s_blk_start[bp][13] ) ? num_coeff[bp] : local_left[bp][2];
-                num_coeff_left[bp-1][3] = ( s_blk_start[bp][10] | s_blk_start[bp][11] | s_blk_start[bp][14] | s_blk_start[bp][15] ) ? num_coeff[bp] : local_left[bp][3];
-                num_coeff_left[bp-1][4] = ( s_blk_start[bp][18] | s_blk_start[bp][19] ) ? num_coeff[bp] : local_left[bp][4];
-                num_coeff_left[bp-1][5] = ( s_blk_start[bp][20] | s_blk_start[bp][21] ) ? num_coeff[bp] : local_left[bp][5];
-                num_coeff_left[bp-1][6] = ( s_blk_start[bp][22] | s_blk_start[bp][23] ) ? num_coeff[bp] : local_left[bp][6];
-                num_coeff_left[bp-1][7] = ( s_blk_start[bp][24] | s_blk_start[bp][25] ) ? num_coeff[bp] : local_left[bp][7];
+                // Update NEXT neighbourhood based on immediate coeff token decode if start of a new blocks  
+                // left is initialized to zero, left_oop will also re-zero             
+                num_coeff_left[bp-1][0] =  ( s_blk_start[bp][ 0] | s_blk_start[bp][ 1] | s_blk_start[bp][ 4] | s_blk_start[bp][ 5] ) ? num_coeff[bp] : local_left[bp][0];
+                num_coeff_left[bp-1][1] =  ( s_blk_start[bp][ 2] | s_blk_start[bp][ 3] | s_blk_start[bp][ 6] | s_blk_start[bp][ 7] ) ? num_coeff[bp] : local_left[bp][1];
+                num_coeff_left[bp-1][2] =  ( s_blk_start[bp][ 8] | s_blk_start[bp][ 9] | s_blk_start[bp][12] | s_blk_start[bp][13] ) ? num_coeff[bp] : local_left[bp][2];
+                num_coeff_left[bp-1][3] =  ( s_blk_start[bp][10] | s_blk_start[bp][11] | s_blk_start[bp][14] | s_blk_start[bp][15] ) ? num_coeff[bp] : local_left[bp][3];
+                num_coeff_left[bp-1][4] =  ( s_blk_start[bp][18] | s_blk_start[bp][19] ) ? num_coeff[bp] : local_left[bp][4];
+                num_coeff_left[bp-1][5] =  ( s_blk_start[bp][20] | s_blk_start[bp][21] ) ? num_coeff[bp] : local_left[bp][5];
+                num_coeff_left[bp-1][6] =  ( s_blk_start[bp][22] | s_blk_start[bp][23] ) ? num_coeff[bp] : local_left[bp][6];
+                num_coeff_left[bp-1][7] =  ( s_blk_start[bp][24] | s_blk_start[bp][25] ) ? num_coeff[bp] : local_left[bp][7];
 
+                // For above, also load the above data.
                 num_coeff_above[bp-1][0] = ( s_blk_start[bp][ 0] | s_blk_start[bp][ 2] | s_blk_start[bp][ 8] | s_blk_start[bp][10] ) ? num_coeff[bp] : local_above[bp][0];
                 num_coeff_above[bp-1][1] = ( s_blk_start[bp][ 1] | s_blk_start[bp][ 3] | s_blk_start[bp][ 9] | s_blk_start[bp][11] ) ? num_coeff[bp] : local_above[bp][1];
                 num_coeff_above[bp-1][2] = ( s_blk_start[bp][ 4] | s_blk_start[bp][ 6] | s_blk_start[bp][12] | s_blk_start[bp][14] ) ? num_coeff[bp] : local_above[bp][2];
@@ -668,5 +679,32 @@ module gg_parse_lattice_macroblock
     assign nc_right                 = num_coeff_left[31];
     assign nc_below                 = num_coeff_above[31];
     assign blk_nc_idx[WIDTH-1:0]    = num_coeff_idx[WIDTH+32-1:32];
+    
+    always_ff @(posedge clk) begin // Lower 32 set of states are flopped  
+        if( reset ) begin
+            // Handle the single bit step cases
+            s_blk_run_reg[31] <= 0;
+            coded_block_pattern_reg[31] <= 0;     
+            num_coeff_left_reg[31] <= 0;          
+            num_coeff_above_reg[31] <= 0;      
+            // Handle variable length codes   
+            for( int bp = 31; bp >= 0; bp-- ) begin
+                s_mb_syntax_reg[bp] <= 0;   
+            end
+        end else begin
+            // Save the single step cases
+            s_blk_run_reg[31]           <= s_blk_run[31];
+            coded_block_pattern_reg[31] <= coded_block_pattern[31];
+            num_coeff_left_reg[31]      <= num_coeff_left[31];          
+            num_coeff_above_reg[31]     <= num_coeff_above[31];      
+            
+            // Handle the variable lenght arcs (up to 31 bits)
+            for( int bp = 31; bp >= 0; bp-- ) begin
+                for( int ii = 0; ii < MB_SYNTAX_COUNT; ii++ ) begin
+                    s_mb_syntax_reg[bp][ii] <= |arc_mb_syntax[bp][ii]; // Reduction OR
+                end
+            end // bp
+        end // reset
+    end // ff
 endmodule
 

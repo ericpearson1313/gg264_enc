@@ -5,7 +5,8 @@ module testbench_mb_lattice(
 
     );
     
-    parameter WID = 128;
+    //parameter WID = 128;
+    parameter WID = 32;
     //////////////////////
     // Let there be Clock!
     //////////////////////
@@ -68,7 +69,6 @@ module testbench_mb_lattice(
 
 
     logic [127:0] vlc_mb_vec;
-    logic [9:0] len;
     
     assign vlc_mb_vec = 
      128'b_1_0_1_1_000010100_1_001_11_011_001_10_0_1_10_1_011_000101_1_1_01_0_1_01_0_1_000101_1_1_000101_1_1_01_1_011_000101_1_1_01_1_011_01_0_1_000101_1_1_000101_1_1_1_01_0_1_01_001_11_01_0_000000;
@@ -85,9 +85,23 @@ module testbench_mb_lattice(
         // startup delay (for future reset)
         for( int ii = 0; ii < 10; ii++ ) @(posedge clk); // 10 cycles
 
+        reset = 0;
+        for( int bc = 0; bc < 128; bc += WID ) begin        
+            for( int pos = 0; pos < WID; pos++ ) begin
+                bits[WID-1-pos] = vlc_mb_vec[127-(bc)-pos];
+            end
+            for( int pos = 0; pos < 32; pos++ ) begin
+                pad[31-pos] = ( bc+WID+pos < 128 ) ? vlc_mb_vec[127-bc-WID-pos] : 1'b0;
+            end
+            mb_start[WID-1] = ( bc == 0 ) ? 1'b1 : 1'b0;
+            @(posedge clk);
+        end
+        bits = 0;
+        pad = 0;
+        reset = 1;
         // Test case
-        bits = vlc_mb_vec[127:0];
-        mb_start[127] = 1'b1;
+        //bits = vlc_mb_vec[127:0];
+        //mb_start[127] = 1'b1;
         for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
 
         bits = 0;
