@@ -150,20 +150,20 @@ module gg_parse_lattice_macroblock
                  if( bits[bp-:2 ]== 2'b01                ) arc_mb_syntax[bp-3][MB_SYNTAX_P16x8_REF0][0]  =  mb_start_flag[bp]; // 1 - P16x8 and 2 - P8x16
                  if( bits[bp-:9 ]== 9'b00001111         ) arc_mb_syntax[((bp-9)/8)*8][MB_SYNTAX_PCM_ALIGN][(bp-9)%8] = mb_start_flag[bp]; // 30 - PCM
             end // mb_type
+
+            // Reduction OR the current arcs and previous registered ones too.           
+            for( int ii = 0; ii < MB_SYNTAX_COUNT; ii++ ) begin
+                s_mb_syntax[bp][ii] = |arc_mb_syntax[bp][ii] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][ii] : 1'b0 ); // Reduction OR
+            end
+           
            
             begin : _pcm_mb // TODO: handle PCM MBs 384 byte step, wrap registers
-                 s_mb_syntax[bp][MB_SYNTAX_PCM_ALIGN] = |arc_mb_syntax[bp][MB_SYNTAX_PCM_ALIGN] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_PCM_ALIGN] : 1'b0 ); // Reduction OR
             //    arc_pcm_last[bp-3072] = s_mb_syntax[bp][MB_SYNTAX_PCM_ALIGN];
             end // pcm
             
             begin : _refidx // assume num_refidx_minus_1 == 0, so single bit only
-                 s_mb_syntax[bp][MB_SYNTAX_P16x16_REF] = |arc_mb_syntax[bp][MB_SYNTAX_P16x16_REF] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x16_REF] : 1'b0 ); // Reduction OR
                  arc_mb_syntax[bp-1][MB_SYNTAX_P16x16_MVX][0] = s_mb_syntax[bp][MB_SYNTAX_P16x16_REF];   
-                 
-                 s_mb_syntax[bp][MB_SYNTAX_P16x8_REF0] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_REF0] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x8_REF0] : 1'b0 ); // Reduction OR
                  arc_mb_syntax[bp-1][MB_SYNTAX_P16x8_REF1][0] = s_mb_syntax[bp][MB_SYNTAX_P16x8_REF0];   
-                 
-                 s_mb_syntax[bp][MB_SYNTAX_P16x8_REF1] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_REF1] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x8_REF1] : 1'b0 ); // Reduction OR
                  arc_mb_syntax[bp-1][MB_SYNTAX_P16x8_MVX0][0] = s_mb_syntax[bp][MB_SYNTAX_P16x8_REF1];
             end
             
@@ -187,39 +187,16 @@ module gg_parse_lattice_macroblock
             end // ue prefix
 
             begin : _mb_syntax // All are UE/SE (assume max 15 prefix length
-                s_mb_syntax[bp][MB_SYNTAX_P16x16_MVX] = |arc_mb_syntax[bp][MB_SYNTAX_P16x16_MVX] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x16_MVX] : 1'b0 ); // Reduction OR
-                for( int pl=0; pl < 16; pl++ ) 
+                for( int pl=0; pl < 16; pl++ ) begin
                     arc_mb_syntax[bp-(pl*2+1)][MB_SYNTAX_P16x16_MVY][pl] = ue_prefix[bp][pl] & s_mb_syntax[bp][MB_SYNTAX_P16x16_MVX];   
-
-                s_mb_syntax[bp][MB_SYNTAX_P16x16_MVY] = |arc_mb_syntax[bp][MB_SYNTAX_P16x16_MVY] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x16_MVY] : 1'b0 ); // Reduction OR
-                for( int pl=0; pl < 16; pl++ ) 
                     arc_mb_syntax[bp-(pl*2+1)][MB_SYNTAX_CBP       ][pl] = ue_prefix[bp][pl] & s_mb_syntax[bp][MB_SYNTAX_P16x16_MVY];
-                    
-                s_mb_syntax[bp][MB_SYNTAX_P16x8_MVX0] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_MVX0] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x8_MVX0] : 1'b0 ); // Reduction OR
-                for( int pl=0; pl < 16; pl++ ) 
                     arc_mb_syntax[bp-(pl*2+1)][MB_SYNTAX_P16x8_MVY0][pl] = ue_prefix[bp][pl] & s_mb_syntax[bp][MB_SYNTAX_P16x8_MVX0];   
-
-                s_mb_syntax[bp][MB_SYNTAX_P16x8_MVY0] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_MVY0] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x8_MVY0] : 1'b0 ); // Reduction OR
-                for( int pl=0; pl < 16; pl++ ) 
                     arc_mb_syntax[bp-(pl*2+1)][MB_SYNTAX_P16x8_MVX1][pl] = ue_prefix[bp][pl] & s_mb_syntax[bp][MB_SYNTAX_P16x8_MVY0];   
-                    
-                s_mb_syntax[bp][MB_SYNTAX_P16x8_MVX1] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_MVX1] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x8_MVX1] : 1'b0 ); // Reduction OR
-                for( int pl=0; pl < 16; pl++ ) 
                     arc_mb_syntax[bp-(pl*2+1)][MB_SYNTAX_P16x8_MVY1][pl] = ue_prefix[bp][pl] & s_mb_syntax[bp][MB_SYNTAX_P16x8_MVX1];  
-                    
-                s_mb_syntax[bp][MB_SYNTAX_P16x8_MVY1] = |arc_mb_syntax[bp][MB_SYNTAX_P16x8_MVY1] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_P16x8_MVY1] : 1'b0 ); // Reduction OR
-                for( int pl=0; pl < 16; pl++ ) 
                     arc_mb_syntax[bp-(pl*2+1)][MB_SYNTAX_CBP    ][pl+16] = ue_prefix[bp][pl] & s_mb_syntax[bp][MB_SYNTAX_P16x8_MVY1];    
-                                    
-                s_mb_syntax[bp][MB_SYNTAX_CBP] = |arc_mb_syntax[bp][MB_SYNTAX_CBP] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_CBP] : 1'b0 ); // Reduction OR
-                for( int pl=0; pl < 16; pl++ ) 
                     arc_mb_syntax[bp-(pl*2+1)][MB_SYNTAX_DELTA_QP  ][pl] = ue_prefix[bp][pl] & s_mb_syntax[bp][MB_SYNTAX_CBP];   
-                    
-                s_mb_syntax[bp][MB_SYNTAX_DELTA_QP] = |arc_mb_syntax[bp][MB_SYNTAX_DELTA_QP] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_DELTA_QP] : 1'b0 ); // Reduction OR
-                for( int pl=0; pl < 16; pl++ ) 
                     arc_mb_syntax[bp-(pl*2+1)][MB_SYNTAX_RESIDUAL  ][pl] = ue_prefix[bp][pl] & s_mb_syntax[bp][MB_SYNTAX_DELTA_QP];   
-                    
-                s_mb_syntax[bp][MB_SYNTAX_RESIDUAL] = |arc_mb_syntax[bp][MB_SYNTAX_RESIDUAL] | ((bp >= WIDTH) ? s_mb_syntax_reg[bp-WIDTH][MB_SYNTAX_RESIDUAL] : 1'b0 ); // Reduction OR
+                end // pl    
             end // mv
 
             begin : _codec_block_pattern // if this is start of a CBP then decode it, otherwise forward CBP 
