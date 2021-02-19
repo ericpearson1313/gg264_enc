@@ -85,6 +85,7 @@ module testbench_mb_lattice(
         // startup delay (for future reset)
         for( int ii = 0; ii < 10; ii++ ) @(posedge clk); // 10 cycles
 
+        // TEST #1 : Coded Macroblock
         reset = 0;
         for( int bc = 0; bc < 128; bc += WID ) begin        
             for( int pos = 0; pos < WID; pos++ ) begin
@@ -98,14 +99,23 @@ module testbench_mb_lattice(
         end
         bits = 0;
         pad = 0;
+        mb_start = 0;
         reset = 1;
-        // Test case
-        //bits = vlc_mb_vec[127:0];
-        //mb_start[127] = 1'b1;
         for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
 
+        // TEST #2 : PCM macroblock
+        reset = 0;
+        for( int wc = 0; wc < ((3072 / WID) + 1); wc++ ) begin
+            mb_start[WID-1] = ( wc == 0 ) ? 1'b1 : 1'b0;
+            bits[(WID-1)-:9] = ( wc == 0 ) ? 9'b00001111 : 9'b0;
+            @(posedge clk);
+        end 
         bits = 0;
+        pad = 0;
         mb_start = 0;
+        reset = 1;
+        for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
+
  
  
         // End delay for waveforms

@@ -86,6 +86,10 @@ module gg_parse_lattice_macroblock
     logic [WIDTH+31:0][0:25]           s_blk_start;    
     logic [WIDTH+31:0][0:25]           s_blk_run;
     logic      [31:31][0:25]           s_blk_run_reg;
+    
+    logic [WIDTH+31:32][7:0]            pcm_cnt_next;    
+    logic [WIDTH+31:32][7:0]            pcm_cnt_reg;    
+    
  
     logic [WIDTH+31:0][0:7][4:0]        local_left;
     logic [WIDTH+31:0][0:7][4:0]        local_above;
@@ -133,7 +137,10 @@ module gg_parse_lattice_macroblock
         arc_nc_x2 = 0; 
         nc_x2 = 0;  // { ac_flag, nc_idx[4], nc[4:0], ignore[0] }
         num_coeff = 0;
-        nc = 0;;
+        nc = 0;
+        
+        // Clear pcm count
+        pcm_cnt_next = 0;
        
         
         // Set starting neighbourhood state from trailing registers
@@ -148,7 +155,7 @@ module gg_parse_lattice_macroblock
             begin : _mbtype // Just decode the few used: 0, 1, 2, 30 
                  if( bits[bp-:1 ]== 1'b1                ) arc_mb_syntax[bp-1][MB_SYNTAX_P16x16_REF][0]  =  mb_start_flag[bp]; // 0 - P16x16
                  if( bits[bp-:2 ]== 2'b01                ) arc_mb_syntax[bp-3][MB_SYNTAX_P16x8_REF0][0]  =  mb_start_flag[bp]; // 1 - P16x8 and 2 - P8x16
-                 if( bits[bp-:9 ]== 9'b00001111         ) arc_mb_syntax[((bp-9)/8)*8][MB_SYNTAX_PCM_ALIGN][(bp-9)%8] = mb_start_flag[bp]; // 30 - PCM
+                 if( bits[bp-:9 ]== 9'b00001111         ) arc_mb_syntax[((bp-9)/8)*8-1][MB_SYNTAX_PCM_ALIGN][(bp-9)%8] = mb_start_flag[bp]; // 30 - PCM
             end // mb_type
 
             // Reduction OR the current arcs and previous registered ones too.           
@@ -159,6 +166,17 @@ module gg_parse_lattice_macroblock
            
             begin : _pcm_mb // TODO: handle PCM MBs 384 byte step, wrap registers
             //    arc_pcm_last[bp-3072] = s_mb_syntax[bp][MB_SYNTAX_PCM_ALIGN];
+            // Bitstream is byte aligned on input
+                if( bp % 8 == 7 ) begin // Only the 1st bit of a byte can be pcm start or end
+                    int bpm, bpc;
+                    bpm = WIDTH + 31 - (( WIDTH + 31 - bp + 3072) % WIDTH);
+                    bpc = ( WIDTH + 31 - bp + 3072) / WIDTH;
+                    if( s_mb_syntax[bp][MB_SYNTAX_PCM_ALIGN] ) begin
+                        pcm_cnt_next[bpm] = bpc;
+                    end else if( pcm_cnt_reg[bpm] != 8'h00 ) begin
+                        pcm_cnt_next[bpm] = pcm_cnt_reg[bpm] - 8'h01;
+                    end
+                end // msb bit
             end // pcm
             
             begin : _refidx // assume num_refidx_minus_1 == 0, so single bit only
@@ -311,7 +329,7 @@ module gg_parse_lattice_macroblock
                 s_blk_start[bp][25] =  s_blk_run[bp][24] & blk_end_flag[bp];
 
                 // Current s_mb_end
-                s_last[bp] = s_blk_zero[ bp][ 4] | s_blk_run[bp][25] & blk_end_flag[bp] ;
+                s_last[bp] = s_blk_zero[ bp][ 4] | s_blk_run[bp][25] & blk_end_flag[bp] | ( pcm_cnt_reg[bp] == 8'h01 );
 
                 // Next run state which latches until blk_end_flag
                 for( int ii = 0; ii < 26; ii++ ) begin
@@ -668,6 +686,7 @@ module gg_parse_lattice_macroblock
             for( int bp = 31; bp >= 0; bp-- ) begin
                 s_mb_syntax_reg[bp] <= 0;   
             end
+            pcm_cnt_reg <= 0;
         end else begin
             // Save the single step cases
             s_blk_run_reg[31]           <= s_blk_run[31];
@@ -681,6 +700,9 @@ module gg_parse_lattice_macroblock
                     s_mb_syntax_reg[bp][ii] <= |arc_mb_syntax[bp][ii]; // Reduction OR
                 end
             end // bp
+            
+            // Handle the pcm counters
+            pcm_cnt_reg <= pcm_cnt_next;
         end // reset
     end // ff
 endmodule
