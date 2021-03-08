@@ -597,6 +597,8 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width, int row_slice
             }
 
             skip_run = 0;
+
+            gg_deblock_init_row(&dbp); // Marks above as oop
         }
 
         // Clear lefnc 

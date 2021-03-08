@@ -48,6 +48,15 @@ void gg_deblock_init(DeblockCtx* dbp, int disable_deblock_filter_idc, int filter
 	LogFrame();
 }
 
+void gg_deblock_init_row(DeblockCtx* dbp)
+{
+	if (dbp->disable_deblock_filter_idc == 2) {
+		for (int ii = 0; ii < 1024; ii++) { // mark above row out of pic
+			dbp->abv[ii].oop = 1;
+		}
+	}
+}
+
 void gg_deblock_close() {
 	LogClose();
 }
