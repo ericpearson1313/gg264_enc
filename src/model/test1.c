@@ -19,7 +19,7 @@ int mb_height = PIC_HEIGHT>>4;
 
 // Parameters 
 int disable_deblocking_filter_idc = 1; // 0-enable, 1-disable, 2-disable across slices boundaries
-int pintra_disable_deblocking_filter_idc = 1; // pintra frames :0-enable, 1-disable, 2-disable across slices boundaries
+int pintra_disable_deblocking_filter_idc = 0; // pintra frames :0-enable, 1-disable, 2-disable across slices boundaries
 int filterOffsetA = 0;
 int filterOffsetB = 0;
 

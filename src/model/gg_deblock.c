@@ -428,6 +428,7 @@ void gg_deblock_mb(DeblockCtx* dbp, int mbx, int mby, char *recon_y, char *recon
 	LogInput(BlkPtr(9), 0, 9);
 	if (alwy) deblock_y4(dbp, 9, 0, BlkPtr(9), BlkPtr(8), &bSh[6]);
 	if (alwy) deblock_y4(dbp, 8, 1, BlkPtr(8), BlkPtr(2), &bSv[8]);
+	if (alwy) WriteBlkY(recon_y, 0, 1, BlkPtr(2));
 	if (alwy) LogOutput(BlkPtr(2), 0);
 	LogStep();
 
