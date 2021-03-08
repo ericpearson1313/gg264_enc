@@ -18,6 +18,7 @@ int mb_width = PIC_WIDTH>>4;
 int mb_height = PIC_HEIGHT>>4;
 
 // Parameters 
+int row_slice_flag = 1;
 int disable_deblocking_filter_idc = 1; // 0-enable, 1-disable, 2-disable across slices boundaries
 int pintra_disable_deblocking_filter_idc = 0; // pintra frames :0-enable, 1-disable, 2-disable across slices boundaries
 int filterOffsetA = 0;
@@ -523,7 +524,7 @@ void ggo_put_bitbuffer(bitbuffer* bits, const char *desc)
 
 // Encode a frame using fixed 128 ref frame, mvd 0,0. (e.g. a P-intra block)
 // skips are enabled if ref =0. For ref = 1, we could modify the ref pic list, but we want to test this mode
-void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
+void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width, int row_slice_flag ) {
 
     bitbuffer bits_y[16], bits_cb[4], bits_cr[4], bits_dc_cb, bits_dc_cr;
     int bitcount[8];
@@ -543,59 +544,63 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
     char lefnc_y[4], lefnc_cb[2], lefnc_cr[2];
     int num_coeff_y[16], num_coeff_cb[4], num_coeff_cr[4];
 
-    // Nal unit 
-    ggo_put_start(3);
-    ggo_put_null("nal_unit( NumBytesInNALunit ) {  ");
-    ggo_putbits(0, 1, "forbidden_zero_bit f(1)  ");
-    ggo_putbits(1, 2, "nal_ref_idc u(2)         ");
-    ggo_putbits(1, 5, "nal_unit_type u(5) 1=non-idr");
-    ggo_put_null("}");
-    // RBSP
-    ggo_put_null("slice_header() {");
-    ggo_put_ue(0, "first_mb_in_slice ue(v)     ");
-    ggo_put_ue(0, "slice_type ue(v) 0=P Slice  ");
-    ggo_put_ue(0, "pic_parameter_set_id ue(v)  ");
-    ggo_putbits(ggo_frame, 4, "frame_num u(v)          ");
-    ggo_putbits(ggo_frame++, 4, "pic_order_cnt_lsb u(v)  ");
-    ggo_putbits(0, 1, "num_ref_idx_active_override_flag u(1)");
-
-    ggo_put_null("ref_pic_list_modification() {");
-    ggo_putbits(0, 1, "ref_pic_list_modification_flag_l0 u(1)");
-    ggo_put_null("}");
-
-    ggo_put_null("dec_ref_pic_marking() {");
-    ggo_putbits(0, 1, "adaptive_ref_pic_marking_mode_flag u(1)");
-    ggo_put_null("}");
-
-    ggo_put_se( qp - 26, "slice_qp_delta se(v)        "); // assume pps default is 26. qp in {0,51}
-    ggo_put_ue(pintra_disable_deblocking_filter_idc, "disable_deblocking_filter_idc ue(v)");
-    if (pintra_disable_deblocking_filter_idc != 1) {
-        ggo_put_se(0, "slice_alpha_c0_offset_div2 se(v)");
-        ggo_put_se(0, "slice_beta_offset_div2 se(v)");
-    }
-    ggo_put_null("}");
-
-    // Macroblocks
-    ggo_put_null("slice_data() {");
-
-    // Clear abvnc
-    for (int ii = 0; ii < (PIC_WIDTH >> 2); ii++) {
-        abvnc_y[ii] = -1;
-    }
-    for (int ii = 0; ii < (PIC_WIDTH >> 3); ii++) {
-        abvnc_cb[ii] = -1;
-        abvnc_cr[ii] = -1;
-    }
-
-
     // Init Deblock;
-
     gg_deblock_init( &dbp, pintra_disable_deblocking_filter_idc, filterOffsetA, filterOffsetB, mb_width, mb_height ); // allocate and deblock for start of single slice frame
 
+ 
     // Process frame of macroblocks
-    for (int yy = 0; yy < mb_height; yy++) {
+    for (int yy = 0; yy < mb_height; yy++) { // For each macroblock row.
+        if (yy == 0 || row_slice_flag) {
+
+            // Nal unit 
+            ggo_put_start(3);
+            ggo_put_null("nal_unit( NumBytesInNALunit ) {  ");
+            ggo_putbits(0, 1, "forbidden_zero_bit f(1)  ");
+            ggo_putbits(1, 2, "nal_ref_idc u(2)         ");
+            ggo_putbits(1, 5, "nal_unit_type u(5) 1=non-idr");
+            ggo_put_null("}");
+            // RBSP
+            ggo_put_null("slice_header() {");
+            ggo_put_ue(yy * mb_width, "first_mb_in_slice ue(v)     ");
+            ggo_put_ue(0, "slice_type ue(v) 0=P Slice  ");
+            ggo_put_ue(0, "pic_parameter_set_id ue(v)  ");
+            ggo_putbits(ggo_frame, 4, "frame_num u(v)          ");
+            ggo_putbits(ggo_frame++, 4, "pic_order_cnt_lsb u(v)  ");
+            ggo_putbits(0, 1, "num_ref_idx_active_override_flag u(1)");
+
+            ggo_put_null("ref_pic_list_modification() {");
+            ggo_putbits(0, 1, "ref_pic_list_modification_flag_l0 u(1)");
+            ggo_put_null("}");
+
+            ggo_put_null("dec_ref_pic_marking() {");
+            ggo_putbits(0, 1, "adaptive_ref_pic_marking_mode_flag u(1)");
+            ggo_put_null("}");
+
+            ggo_put_se(qp - 26, "slice_qp_delta se(v)        "); // assume pps default is 26. qp in {0,51}
+            ggo_put_ue(pintra_disable_deblocking_filter_idc, "disable_deblocking_filter_idc ue(v)");
+            if (pintra_disable_deblocking_filter_idc != 1) {
+                ggo_put_se(0, "slice_alpha_c0_offset_div2 se(v)");
+                ggo_put_se(0, "slice_beta_offset_div2 se(v)");
+            }
+            ggo_put_null("}");
+
+            // Macroblocks
+            ggo_put_null("slice_data() {");
+
+            // Clear abvnc
+            for (int ii = 0; ii < (PIC_WIDTH >> 2); ii++) {
+                abvnc_y[ii] = -1;
+            }
+            for (int ii = 0; ii < (PIC_WIDTH >> 3); ii++) {
+                abvnc_cb[ii] = -1;
+                abvnc_cr[ii] = -1;
+            }
+
+            skip_run = 0;
+        }
+
         // Clear lefnc 
-        for (int ii = 0; ii < 4 ; ii++) {
+        for (int ii = 0; ii < 4; ii++) {
             lefnc_y[ii] = -1;
         }
         for (int ii = 0; ii < 2; ii++) {
@@ -616,8 +621,8 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
                 for (int bx = 0; bx < 4; bx++)
                     for (int py = 0; py < 4; py++)
                         for (int px = 0; px < 4; px++) {
-                            orig_y[by * 4 + bx][py * 4 + px] = 0xff & ggi_y            [xx * 16 + bx * 4 + px + (yy * 16 + by * 4 + py) * mb_width * 16];
-                            ref_y [by * 4 + bx][py * 4 + px] = 0xff & ggo_ref_y[refidx][xx * 16 + bx * 4 + px + (yy * 16 + by * 4 + py) * mb_width * 16];
+                            orig_y[by * 4 + bx][py * 4 + px] = 0xff & ggi_y[xx * 16 + bx * 4 + px + (yy * 16 + by * 4 + py) * mb_width * 16];
+                            ref_y[by * 4 + bx][py * 4 + px] = 0xff & ggo_ref_y[refidx][xx * 16 + bx * 4 + px + (yy * 16 + by * 4 + py) * mb_width * 16];
                         }
 
             // Clear Chroma DC (as will be sparely populated accumulations)
@@ -663,8 +668,8 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
             num_coeff = 0;
             num_coeff += num_coeff_y[8] = gg_process_block(qp, ofs, dz, ref_y[8], orig_y[8], dc_hold[0], 0, 8, lefnc_y, abvnc_y + xx * 4, recon_y[8], &bits_y[8], &bitcount[0], &sad, &ssd);
             num_coeff += num_coeff_y[9] = gg_process_block(qp, ofs, dz, ref_y[9], orig_y[9], dc_hold[0], 0, 9, lefnc_y, abvnc_y + xx * 4, recon_y[9], &bits_y[9], &bitcount[1], &sad, &ssd);
-            num_coeff += num_coeff_y[10]= gg_process_block(qp, ofs, dz, ref_y[12], orig_y[12], dc_hold[0], 0, 10, lefnc_y, abvnc_y + xx * 4, recon_y[12], &bits_y[10], &bitcount[2], &sad, &ssd);
-            num_coeff += num_coeff_y[11]= gg_process_block(qp, ofs, dz, ref_y[13], orig_y[13], dc_hold[0], 0, 11, lefnc_y, abvnc_y + xx * 4, recon_y[13], &bits_y[11], &bitcount[3], &sad, &ssd);
+            num_coeff += num_coeff_y[10] = gg_process_block(qp, ofs, dz, ref_y[12], orig_y[12], dc_hold[0], 0, 10, lefnc_y, abvnc_y + xx * 4, recon_y[12], &bits_y[10], &bitcount[2], &sad, &ssd);
+            num_coeff += num_coeff_y[11] = gg_process_block(qp, ofs, dz, ref_y[13], orig_y[13], dc_hold[0], 0, 11, lefnc_y, abvnc_y + xx * 4, recon_y[13], &bits_y[11], &bitcount[3], &sad, &ssd);
             cbp |= (num_coeff) ? 4 : 0;
             macroblock_layer_length += (num_coeff) ? (bitcount[0] + bitcount[1] + bitcount[2] + bitcount[3]) : 0;
             // Luma LR
@@ -834,15 +839,21 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
 
             // Deblock Macroblock after skip/pcm/inter decision finalized
             if (pintra_disable_deblocking_filter_idc != 1) {
-                gg_deblock_mb(&dbp, xx, yy, ggo_recon_y,  ggo_recon_cb, ggo_recon_cr, num_coeff_y, num_coeff_cb, num_coeff_cr, qp, refidx, mb_type );
+                gg_deblock_mb(&dbp, xx, yy, ggo_recon_y, ggo_recon_cb, ggo_recon_cr, num_coeff_y, num_coeff_cb, num_coeff_cr, qp, refidx, mb_type);
             }
         }
+
+        if (yy == mb_height - 1 || row_slice_flag) {
+            // No final skip_run as ref1 is used
+            if (skip_run) { // final skip run for frame
+                ggo_put_ue(skip_run, "mb_skip_run ue(v)");
+            }
+            ggo_put_null("}");
+            // stop slice
+            ggo_rbsp_trailing_bits();
+            ggo_put_null("}");
+        }
     }
-    // No final skip_run as ref1 is used
-    if( skip_run ) { // final skip run for frame
-        ggo_put_ue(skip_run, "mb_skip_run ue(v)");
-    }
-    ggo_put_null("}");
 
     if (intra_col_width) {
         ggo_intra_col = (ggo_intra_col + intra_col_width);
@@ -852,9 +863,6 @@ void ggo_inter_0_0_slice( int qp, int refidx, int intra_col_width ) {
 
     gg_deblock_close();
 
-    // stop slice
-    ggo_rbsp_trailing_bits();
-    ggo_put_null("}");
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////
@@ -972,7 +980,7 @@ int main( int argc, int **argv )
         ggo_sequence_parameter_set();
         ggo_picture_parameter_set();
         ggi_read_frame();
-        ggo_inter_0_0_slice(qp, 0, 5); // pintra refresh cols
+        ggo_inter_0_0_slice(qp, 0, 1, row_slice_flag ); // pintra refresh cols
         recon_write_yuv();
         recon_copy_to_ref(0);
     }
@@ -982,7 +990,7 @@ int main( int argc, int **argv )
         ggo_sequence_parameter_set();
         ggo_picture_parameter_set();
         ggi_read_frame();
-        ggo_inter_0_0_slice(qp, 1, 0);
+        ggo_inter_0_0_slice(qp, 1, 0, 0);
         recon_write_yuv();
         recon_copy_to_ref(0);
     }
