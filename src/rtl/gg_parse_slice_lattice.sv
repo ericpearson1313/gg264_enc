@@ -65,17 +65,19 @@ module gg_parse_lattice_rowslice
     parameter SLICE_SYNTAX_SKIP_RUN   = 12; // mb_skip_run ue(v)
     parameter SLICE_SYNTAX_COUNT      = 13;
 
-    logic [WIDTH+31:0][0:13]           s_slice_syntax; // macroblock syntax elements 
-    logic       [31:0][0:13]           s_slice_syntax_reg; // macroblock syntax elements 
-    logic [WIDTH+31:0][0:13][0:31]   arc_slice_syntax; // [syntax element][ue/se prefix length] 
+    logic [WIDTH+31:0][0:12]           s_slice_syntax; // macroblock syntax elements 
+    logic       [31:0][0:12]           s_slice_syntax_reg; // macroblock syntax elements 
+    logic [WIDTH+31:0][0:12][0:16]   arc_slice_syntax; // [syntax element][ue/se prefix length] 
 
-    logic [WIDTH+31:0][0:1][0:15] arc_slice_more_rbsp;
-    logic [WIDTH+31:0][0:1]         s_slice_more_rbsp;
+    logic [WIDTH+31:0][0:15]    arc_slice_more_rbsp;
+    logic [WIDTH+31:0]            s_slice_more_rbsp;
+    logic       [31:0]            s_slice_more_rbsp_reg; 
      
     logic [WIDTH+31:0]               s_mb_start;    
   
     logic [WIDTH+31:0][0:8]               arc_last;
     logic [WIDTH+31:0]                      s_last;
+    logic       [31:31]                      s_last_reg; 
     
     logic [WIDTH+31:0][0:15]            ue_prefix;
     logic [WIDTH+31:0]                  more_rbsp;
@@ -116,22 +118,22 @@ module gg_parse_lattice_rowslice
         // Instantiate unqiue hardware for each bit of the input
         for( int bp = WIDTH-1+32; bp >= 32; bp-- ) begin : _slice_lattice_col
             begin : _ue_prefix
-                if( bits[bp-:1 ] == 1'b1                 ) ue_prefix[bp][0] = 1'b1;
-                if( bits[bp-:2 ] == 2'b01                ) ue_prefix[bp][1] = 1'b1;
-                if( bits[bp-:3 ] == 3'b001               ) ue_prefix[bp][2] = 1'b1;
-                if( bits[bp-:4 ] == 4'b0001              ) ue_prefix[bp][3] = 1'b1;
-                if( bits[bp-:5 ] == 5'b00001             ) ue_prefix[bp][4] = 1'b1;
-                if( bits[bp-:6 ] == 6'b000001            ) ue_prefix[bp][5] = 1'b1;
-                if( bits[bp-:7 ] == 7'b0000001           ) ue_prefix[bp][6] = 1'b1;
-                if( bits[bp-:8 ] == 8'b00000001          ) ue_prefix[bp][7] = 1'b1;
-                if( bits[bp-:9 ] == 9'b000000001         ) ue_prefix[bp][8] = 1'b1;
-                if( bits[bp-:10] == 10'b0000000001       ) ue_prefix[bp][9] = 1'b1;
-                if( bits[bp-:11] == 11'b00000000001      ) ue_prefix[bp][10] = 1'b1;
-                if( bits[bp-:12] == 12'b000000000001     ) ue_prefix[bp][11] = 1'b1;
-                if( bits[bp-:13] == 13'b0000000000001    ) ue_prefix[bp][12] = 1'b1;
-                if( bits[bp-:14] == 14'b00000000000001   ) ue_prefix[bp][13] = 1'b1;
-                if( bits[bp-:15] == 15'b000000000000001  ) ue_prefix[bp][14] = 1'b1;
-                if( bits[bp-:16] == 16'b0000000000000001 ) ue_prefix[bp][15] = 1'b1;
+                ue_prefix[bp][0] = ( bits[bp-:1 ] == 1'b1                 ) ? 1'b1 : 1'b0; 
+                ue_prefix[bp][1] = ( bits[bp-:2 ] == 2'b01                ) ? 1'b1 : 1'b0; 
+                ue_prefix[bp][2] = ( bits[bp-:3 ] == 3'b001               ) ? 1'b1 : 1'b0; 
+                ue_prefix[bp][3] = ( bits[bp-:4 ] == 4'b0001              ) ? 1'b1 : 1'b0; 
+                ue_prefix[bp][4] = ( bits[bp-:5 ] == 5'b00001             ) ? 1'b1 : 1'b0; 
+                ue_prefix[bp][5] = ( bits[bp-:6 ] == 6'b000001            ) ? 1'b1 : 1'b0; 
+                ue_prefix[bp][6] = ( bits[bp-:7 ] == 7'b0000001           ) ? 1'b1 : 1'b0; 
+                ue_prefix[bp][7] = ( bits[bp-:8 ] == 8'b00000001          ) ? 1'b1 : 1'b0; 
+                ue_prefix[bp][8] = ( bits[bp-:9 ] == 9'b000000001         ) ? 1'b1 : 1'b0; 
+                ue_prefix[bp][9] = ( bits[bp-:10] == 10'b0000000001       ) ? 1'b1 : 1'b0; 
+                ue_prefix[bp][10] =( bits[bp-:11] == 11'b00000000001      ) ? 1'b1 : 1'b0; 
+                ue_prefix[bp][11] =( bits[bp-:12] == 12'b000000000001     ) ? 1'b1 : 1'b0; 
+                ue_prefix[bp][12] =( bits[bp-:13] == 13'b0000000000001    ) ? 1'b1 : 1'b0; 
+                ue_prefix[bp][13] =( bits[bp-:14] == 14'b00000000000001   ) ? 1'b1 : 1'b0; 
+                ue_prefix[bp][14] =( bits[bp-:15] == 15'b000000000000001  ) ? 1'b1 : 1'b0; 
+                ue_prefix[bp][15] =( bits[bp-:16] == 16'b0000000000000001 ) ? 1'b1 : 1'b0; 
             end // ue prefix
 
             begin : _slice_header_syntax 
@@ -177,7 +179,7 @@ module gg_parse_lattice_rowslice
                 for( int pl=0; pl < 16; pl++ ) begin
                     arc_slice_more_rbsp[bp-(pl*2+1)][pl] = ue_prefix[bp][pl] & ( s_slice_syntax[bp][SLICE_SYNTAX_SKIP_RUN] | more_rbsp[bp] & mb_end_flag[bp] );   
                 end // pl
-                s_slice_more_rbsp[bp] = |arc_slice_more_rbsp[bp]; // Reduction OR
+                s_slice_more_rbsp[bp] = |arc_slice_more_rbsp[bp] | ((bp >= WIDTH) ? s_slice_more_rbsp_reg[bp-WIDTH] : 1'b0 ); // Reduction OR
                 // exit(1) if NO more rbsp after skip run
                 arc_last[bp-1-(bp%8)][bp%8] = !more_rbsp[bp] & s_slice_more_rbsp[bp]; 
                 // if more rbsp start mb
@@ -185,7 +187,7 @@ module gg_parse_lattice_rowslice
                 // exit(2) if NO more rbsp after mb end                        
                 arc_last[bp][8] = !more_rbsp[bp] & mb_end_flag[bp];
                 // slice end Reduction OR
-                s_last[bp] = |arc_last[bp];
+                s_last[bp] = |arc_last[bp] | ((bp == WIDTH+31) ? s_last_reg[31] : 1'b0 ); // Reduction OR
             end // _slice_data_syntax
         end // bp
     end // _lattice
@@ -198,35 +200,22 @@ module gg_parse_lattice_rowslice
         mb_start[WIDTH-1:0] = s_mb_start[WIDTH+32-1:32];
     end
     
-    //always_ff @(posedge clk) begin // Lower 32 set of states are flopped  
-    //    if( reset ) begin
-    //        // Handle the single bit step cases
-    //        s_blk_run_reg[31] <= 0;
-    //        coded_block_pattern_reg[31] <= 0;     
-    //        num_coeff_left_reg[31] <= 0;          
-    //        num_coeff_above_reg[31] <= 0;      
-    //        // Handle variable length codes   
-    //        for( int bp = 31; bp >= 0; bp-- ) begin
-    //            s_mb_syntax_reg[bp] <= 0;   
-    //        end
-    //        pcm_cnt_reg <= 0;
-    //    end else begin
-    //        // Save the single step cases
-    //        s_blk_run_reg[31]           <= s_blk_run[31];
-    //        coded_block_pattern_reg[31] <= coded_block_pattern[31];
-    //        num_coeff_left_reg[31]      <= num_coeff_left[31];          
-    //        num_coeff_above_reg[31]     <= num_coeff_above[31];      
-    //        
-    //        // Handle the variable lenght arcs (up to 31 bits)
-    //        for( int bp = 31; bp >= 0; bp-- ) begin
-    //            for( int ii = 0; ii < MB_SYNTAX_COUNT; ii++ ) begin
-    //                s_mb_syntax_reg[bp][ii] <= |arc_mb_syntax[bp][ii]; // Reduction OR
-    //            end
-    //        end // bp
-    //        
-    //        // Handle the pcm counters
-    //        pcm_cnt_reg <= pcm_cnt_next;
-    //    end // reset
-    //end // ff
+    always_ff @(posedge clk) begin // Lower 32 set of states are flopped  
+        if( reset ) begin
+            // Handle variable length codes   
+            s_slice_more_rbsp_reg <= 0;
+            s_slice_syntax_reg <= 0; 
+            s_last_reg <= 0;  
+        end else begin
+            // Handle the variable lenght arcs (up to 31 bits)
+            s_last_reg[31] <= |arc_last[31]; // Can only occur on 1st padding bit
+            for( int bp = 31; bp >= 0; bp-- ) begin
+                s_slice_more_rbsp_reg[bp] <= |arc_slice_more_rbsp[bp]; // Reduction OR
+                for( int ii = 0; ii < SLICE_SYNTAX_COUNT; ii++ ) begin
+                    s_slice_syntax_reg[bp][ii] <= |arc_slice_syntax[bp][ii]; // Reduction OR
+                end
+            end // bp
+        end // reset
+    end // ff
 endmodule
 
