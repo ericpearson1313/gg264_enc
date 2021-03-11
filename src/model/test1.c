@@ -282,13 +282,13 @@ void ggo_picture_parameter_set() {
     ggo_put_null("}");
 }
 
-void ggo_long_term_grey_idc_slice() {
+void ggo_long_term_grey_idc_slice( int IdrPicFlag ) {
     // Nal unit 
     ggo_put_start(3);
     ggo_put_null("nal_unit( NumBytesInNALunit ) {  ");
     ggo_putbits(0, 1, "forbidden_zero_bit f(1)  ");
     ggo_putbits(1, 2, "nal_ref_idc u(2)         ");
-    ggo_putbits(5, 5, "nal_unit_type u(5) 5=ISlice(IdrPicFlag)");
+    ggo_putbits( ((IdrPicFlag) ? 5 : 1), 5, "nal_unit_type u(5) 5=ISlice(IdrPicFlag)");
     ggo_put_null("}");
     // RBSP
     ggo_put_null("slice_header() {");
@@ -296,12 +296,19 @@ void ggo_long_term_grey_idc_slice() {
     ggo_put_ue( 2,    "slice_type ue(v) 2=I Slice  ");
     ggo_put_ue( 0,    "pic_parameter_set_id ue(v)  ");
     ggo_putbits(ggo_frame, 4, "frame_num u(v)              ");
-    ggo_put_ue( 0,    "idr_pic_id ue(v)        ");
+    if (IdrPicFlag) {
+        ggo_put_ue(0, "idr_pic_id ue(v)        ");
+    }
     ggo_putbits(ggo_frame++, 4, "pic_order_cnt_lsb u(v)      ");
 
     ggo_put_null("dec_ref_pic_marking() {");
-    ggo_putbits( 0, 1, "no_output_of_prior_pics_flag u(1)");
-    ggo_putbits( 1, 1, "long_term_reference_flag u(1)");
+    if (IdrPicFlag) {
+        ggo_putbits(0, 1, "no_output_of_prior_pics_flag u(1)");
+        ggo_putbits(1, 1, "long_term_reference_flag u(1)");
+    }
+    else {
+        ggo_putbits(0, 1, "adaptive_ref_pic_marking_mode_flag u(1)");
+    }
     ggo_put_null("}");
 
     ggo_put_se( 0, "slice_qp_delta se(v)        ");
@@ -958,7 +965,7 @@ int main( int argc, int **argv )
     // Grey long term ref
     ggo_sequence_parameter_set();
     ggo_picture_parameter_set();
-    ggo_long_term_grey_idc_slice();
+    ggo_long_term_grey_idc_slice( 1 ); // IDR long term ref
     recon_write_yuv();
     recon_copy_to_ref(0); // actually where decoder will have it
     recon_copy_to_ref(1); // after next frame this will be avaiable long term
@@ -966,7 +973,8 @@ int main( int argc, int **argv )
     // Grey Skip frame (which puts our long term ref into slot 1
     ggo_sequence_parameter_set();
     ggo_picture_parameter_set();
-    ggo_pskip_slice(); 
+    //ggo_pskip_slice(); 
+    ggo_long_term_grey_idc_slice(0); // grep non-idr pic to push IDR into refidx=1
     recon_write_yuv();
     recon_copy_to_ref(0);
 
@@ -988,14 +996,14 @@ int main( int argc, int **argv )
     }
 
     // Ref1 P frames = 'pintra' frames
-    for (int ii = 0; ii < 1; ii++) {
-        ggo_sequence_parameter_set();
-        ggo_picture_parameter_set();
-        ggi_read_frame();
-        ggo_inter_0_0_slice(qp, 1, 0, 0);
-        recon_write_yuv();
-        recon_copy_to_ref(0);
-    }
+    //for (int ii = 0; ii < 1; ii++) {
+    //    ggo_sequence_parameter_set();
+    //    ggo_picture_parameter_set();
+    //    ggi_read_frame();
+    //    ggo_inter_0_0_slice(qp, 1, 0, 0);
+    //    recon_write_yuv();
+    //    recon_copy_to_ref(0);
+    //}
 
     ggo_close();
     recon_close();
