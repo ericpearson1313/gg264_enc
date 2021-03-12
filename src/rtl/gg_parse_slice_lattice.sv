@@ -97,7 +97,7 @@ module gg_parse_lattice_rowslice
     end
 
     // Loop Over bitpositions 
-    always_comb begin : _lattice_mb_parse
+    always_comb begin : _lattice_slice_parse
         // Clear last arcs
         
         // Clear state arcs
