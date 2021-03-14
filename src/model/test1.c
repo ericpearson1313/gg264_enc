@@ -88,7 +88,7 @@ void ggo_emulation_prev_putc( char obyte )
         printf("*EMU* ");
     }
     fputc(obyte, ggo_fp);
-//    printf("%02x ", obyte & 0xff);
+    printf("%02x ", obyte & 0xff);
     if (obyte == 0)
         ggo_prev_zero++;
     else

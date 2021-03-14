@@ -17,7 +17,8 @@
 //
 
 
-// Parse a Nal  
+// Parse a Nal 
+// Absurdly simple, but functionally practical top level NAL parser.
 // pre-removed emulation_prevention_three_bytes (0x03)
 // Purpose: parse a continuous NAL byte stream (connect start = end)
 // Input: rbsp byte stream, nal_start (byte aligned)
@@ -53,6 +54,7 @@ module gg_parse_nal_lattice
     );
  
     logic [BYTE_WIDTH+3:4]                      s_nal_type;
+    logic [BYTE_WIDTH+3:0]                    arc_nal_type;
     logic            [3:0]                      s_nal_type_reg;
     logic [BYTE_WIDTH+3:4]                      s_search_start;
     logic [BYTE_WIDTH+3:4]                      s_search_run;
@@ -76,6 +78,9 @@ module gg_parse_nal_lattice
     // Loop Over bitpositions 
     always_comb begin : _lattice_nal_parse
 
+        // clear Arcs
+        arc_nal_type     = 0;
+        
         // Clear state
         s_nal_type       = 0;
         s_search_start   = 0;
@@ -90,7 +95,7 @@ module gg_parse_nal_lattice
         slice_start_flag = 0;
         
         // Set first bit input
-        s_search_run[BYTE_WIDTH-1] = s_search_run_reg;
+        s_search_run[BYTE_WIDTH-1+4] = s_search_run_reg;
         
         // Instantiate unqiue hardware for each byte msb bit of the input
         for( int bp = BYTE_WIDTH-1+4; bp >= 4; bp-- ) begin : _slice_lattice_col
@@ -114,7 +119,9 @@ module gg_parse_nal_lattice
                             bits[bp*8+4-:5] == 5'b00001 && bits[bp*8-1-:14] == 14'b00000000000001   && bits[bp*8-28] == 1'b1 ||
                             bits[bp*8+4-:5] == 5'b00001 && bits[bp*8-1-:15] == 15'b000000000000001  && bits[bp*8-30] == 1'b1 ||
                             bits[bp*8+4-:5] == 5'b00001 && bits[bp*8-1-:16] == 16'b0000000000000001 && bits[bp*8-32] == 1'b1 ) ? 1'b1 : 1'b0;
-            
+ 
+            // Update Nal state from arc and reg;
+            s_nal_type[bp] = arc_nal_type[bp] | ((bp >= BYTE_WIDTH) ? s_nal_type_reg[bp-BYTE_WIDTH] : 1'b0 );           
         
             // Start code search
             s_search_start[bp] = slice_end_flag[bp] | nal_start_flag[bp] | (s_nal_type[bp] & !p_slice[bp]);
@@ -123,7 +130,7 @@ module gg_parse_nal_lattice
             s_search_run[bp-1] = ( s_search_start[bp]  | s_search_run[bp] ) & !start_code[bp];
             
             // It it is a startcode then look at the NAL type, slice_type
-            s_nal_type[bp-3] = ( ( s_search_start[bp] | s_search_run[bp] ) & start_code[bp] ) | ((bp >= BYTE_WIDTH) ? s_nal_type_reg[bp-BYTE_WIDTH] : 1'b0 );
+            arc_nal_type[bp-3] = ( ( s_search_start[bp] | s_search_run[bp] ) & start_code[bp] );
         
             // Start NAL if nal_unit_type == 1 // P slice
             slice_start_flag[bp-1] = s_nal_type[bp] & p_slice[bp];
@@ -144,8 +151,8 @@ module gg_parse_nal_lattice
         end else begin
             // Handle the variable lenght arcs (up to 31 bits)
             s_search_run_reg <= ( s_search_start[4]  | s_search_run[4] ) & !start_code[4];
-            for( int bp = 3; bp >= 0; bp-- ) begin
-                s_nal_type_reg[bp] <= ( s_search_start[bp+3] | s_search_run[bp+3] ) & start_code[bp+3];
+            for( int bp = 3; bp > 0; bp-- ) begin
+                s_nal_type_reg[bp] <= arc_nal_type[bp];
             end // bp
         end // reset
     end // ff
