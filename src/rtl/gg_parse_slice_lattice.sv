@@ -75,7 +75,7 @@ module gg_parse_lattice_rowslice
      
     logic [WIDTH+31:0]               s_mb_start;    
   
-    logic [WIDTH+31:0][0:8]               arc_last;
+    logic [WIDTH+31:0][0:15]               arc_last;
     logic [WIDTH+31:0]                      s_last;
     logic       [31:31]                      s_last_reg; 
     
@@ -90,7 +90,7 @@ module gg_parse_lattice_rowslice
     always_comb begin
         slice_start_flag = 0;
         for( int ii = 0; ii < BYTE_WIDTH; ii++ ) begin
-            slice_start_flag[WIDTH-1-ii*8] = slice_start[BYTE_WIDTH-1-ii];
+            slice_start_flag[WIDTH+31-ii*8] = slice_start[BYTE_WIDTH-1-ii];
         end
         mb_end_flag = { mb_end, 32'b0 };
         bits = { in_bits, in_pad };
@@ -177,15 +177,15 @@ module gg_parse_lattice_rowslice
             begin : _slice_data_syntax // Handle the row macroblocks until !more_rbsp_data(), inclding skip runs
                 // Skip run after header and then after each MB if more RBSP available
                 for( int pl=0; pl < 16; pl++ ) begin
-                    arc_slice_more_rbsp[bp-(pl*2+1)][pl] = ue_prefix[bp][pl] & ( s_slice_syntax[bp][SLICE_SYNTAX_SKIP_RUN] | more_rbsp[bp] & mb_end_flag[bp] );   
+                    arc_slice_more_rbsp[bp-(pl*2+1)][pl] = ue_prefix[bp][pl] & more_rbsp[bp] & mb_end_flag[bp];   
                 end // pl
-                s_slice_more_rbsp[bp] = |arc_slice_more_rbsp[bp] | ((bp >= WIDTH) ? s_slice_more_rbsp_reg[bp-WIDTH] : 1'b0 ); // Reduction OR
+                s_slice_more_rbsp[bp] = |arc_slice_more_rbsp[bp] | s_slice_syntax[bp][SLICE_SYNTAX_SKIP_RUN] | ((bp >= WIDTH) ? s_slice_more_rbsp_reg[bp-WIDTH] : 1'b0 ); // Reduction OR
                 // exit(1) if NO more rbsp after skip run
                 arc_last[bp-1-(bp%8)][bp%8] = !more_rbsp[bp] & s_slice_more_rbsp[bp]; 
                 // if more rbsp start mb
                 s_mb_start[bp] = more_rbsp[bp] & s_slice_more_rbsp[bp];
                 // exit(2) if NO more rbsp after mb end                        
-                arc_last[bp][8] = !more_rbsp[bp] & mb_end_flag[bp];
+                arc_last[bp-1-(bp%8)][bp%8+8] = !more_rbsp[bp] & mb_end_flag[bp];
                 // slice end Reduction OR
                 s_last[bp] = |arc_last[bp] | ((bp == WIDTH+31) ? s_last_reg[31] : 1'b0 ); // Reduction OR
             end // _slice_data_syntax
@@ -195,7 +195,7 @@ module gg_parse_lattice_rowslice
     // Connect up the output bits
     always_comb begin
         for( int ii = 0; ii < BYTE_WIDTH; ii++ ) begin
-            slice_end[BYTE_WIDTH-1-ii] = s_last[WIDTH-1-ii*8];
+            slice_end[BYTE_WIDTH-1-ii] = s_last[WIDTH+32-1-ii*8];
         end
         mb_start[WIDTH-1:0] = s_mb_start[WIDTH+32-1:32];
     end
