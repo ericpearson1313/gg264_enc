@@ -951,7 +951,7 @@ void recon_copy_to_ref(int refidx)
 
 int main( int argc, int **argv )
 {
-    int qp = 29;
+    int qp = 40; // 29;
     test_run_before();
    
     printf("argc %d\n", argc);
