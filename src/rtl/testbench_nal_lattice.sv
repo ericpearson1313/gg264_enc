@@ -6,7 +6,7 @@ module testbench_nal_lattice(
     );
     
     //parameter WID = 128;
-    parameter WID = 32;
+    parameter WID = 128;
     parameter BYTE_WID = WID / 8;
 
     
@@ -32,6 +32,7 @@ module testbench_nal_lattice(
     logic [WID-1:0] bits; // bitstream, bit endian packed
     logic [WID-1:0] mb_start; // a single 1-hot bit indicating block end
     logic [WID-1:0] mb_end; // a single 1-hot bit indicating block end
+    logic [WID-1:0] left_oop;
     logic [BYTE_WID-1:0] slice_start; // byte aligned input trigger 
     logic [BYTE_WID-1:0] slice_end; // byte aligned completion      
     logic [BYTE_WID-1:0] nal_start; // byte aligned input trigger 
@@ -69,7 +70,7 @@ module testbench_nal_lattice(
         .slice_end( slice_end ),
         // macroblock lattice interface
         .mb_above_oop( ),
-        .mb_left_oop( ),
+        .mb_left_oop( left_oop ),
         .mb_start( mb_start ), 
         .mb_end( mb_end )
     );
@@ -86,7 +87,7 @@ module testbench_nal_lattice(
         .mb_start( mb_start ), 
         .mb_end( mb_end ),
         // MB neighborhood info
-        .left_oop( 1'b1 ),  
+        .left_oop( left_oop ),  
         .above_oop( 1'b1 ),
         .nc_left( 40'b0 ),
         .nc_above( 40'b0 ),
@@ -110,7 +111,10 @@ module testbench_nal_lattice(
 
     parameter TEST_WID = 5 * 128;
     logic [TEST_WID-1:0] vlc_mb_vec;
-    
+    int fd;
+    int rbsp_byte;
+    int tc;
+            
     assign vlc_mb_vec = { 
         128'h_00_00_00_01_27_42_e0_2a_f7_16_26_20_00_00_00_00, // sps
         128'h_00_00_00_01_28_ca_8f_20_00_00_00_00_00_00_00_00, // pps
@@ -149,10 +153,53 @@ module testbench_nal_lattice(
         nal_start = 0;
         reset = 1;
         for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
+        
 
+        $write("*****************************************************************\n");
+        $write("** \n");
+        $write("** F I L E       V E C T O R      T E S T\n");
+        $write("** \n");
+        $write("*****************************************************************\n");
+        $write("\n");
+        
+        // foreman_qcif_rowslice.264 is 14KB, QCIF 2I+20P frame low quality (qp40) H.264 bitstream
+        // It is intended for a low-est latency and employs column refresh P frames, and row slices.
+        fd = $fopen( "C:/Users/ecp/Documents/gg264_enc/src/test/foreman_qcif_rowslice.264", "rb"); // verified no emulation bytes 0x03
+        
+        bits = 0;
+        pad = 0;
+        nal_start = 0;
+        reset = 1;
+        tc = 0;
+
+
+        // Prefil padding
+        for( int ii = 0; ii < 4; ii++ ) begin
+            pad[31-ii*8-:8] = ( ( rbsp_byte = $fgetc( fd ) ) < 0 ) ? 8'h00 : rbsp_byte ; 
+        end
+        
+        // Loop Until read past the end of the file
+        while( !$feof( fd ) ) begin  
+            // Move padding to top of bit buffer
+            bits[WID-1-:32] = pad;
+            // Fill WID-32 of bits
+            for( int ii = 4; ii < BYTE_WID; ii++ ) begin
+                bits[WID-1-ii*8-:8] = ( ( rbsp_byte = $fgetc( fd ) ) < 0 ) ? 8'h00 : rbsp_byte ;
+            end // ii
+            // Fill Padding
+            for( int ii = 0; ii < 4; ii++ ) begin
+                pad[31-ii*8-:8] = ( ( rbsp_byte = $fgetc( fd ) ) < 0 ) ? 8'h00 : rbsp_byte ; 
+            end
+            nal_start[BYTE_WID-1] = ( tc++ == 0 ) ? 1'b1 : 1'b0;
+            reset = 0;
+            @(posedge clk);
+        end // feof()
+        bits = 0;
+        pad = 0;
+        nal_start = 0;
+        reset = 1;
         // End delay for waveforms
         for( int ii = 0; ii < 5; ii++ ) @(posedge clk);
-
         $finish;
     end
 endmodule

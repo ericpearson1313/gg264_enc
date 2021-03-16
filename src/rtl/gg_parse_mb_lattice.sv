@@ -36,7 +36,7 @@ module gg_parse_lattice_macroblock
     input  logic [WIDTH-1:0] mb_start, // Input trigger
     output logic [WIDTH-1:0] mb_end, // a single 1-hot bit indicating block end
     // MB neighborhood info
-    input  logic left_oop,  
+    input  logic [WIDTH-1:0] left_oop,  
     input  logic above_oop,
     input  logic [0:7][4:0] nc_left , // Y: 0-3 Cb: 4-5 Cr: 6-7
     input  logic [0:7][4:0] nc_above,
@@ -69,6 +69,9 @@ module gg_parse_lattice_macroblock
     parameter MB_SYNTAX_COUNT      = 14;
 
  
+    logic [WIDTH+31:0]                 s_left_oop;
+    logic       [31:31]                s_left_oop_reg;
+    logic [WIDTH+31:0]                 l_oop;
 
     logic [WIDTH+31:0][0:13]           s_mb_syntax; // macroblock syntax elements 
     logic       [31:0][0:13]           s_mb_syntax_reg; // macroblock syntax elements 
@@ -123,6 +126,7 @@ module gg_parse_lattice_macroblock
         s_blk_start = 0;
         s_blk_zero = 0;
         s_last = 0;
+        s_left_oop = 0;
 
         // Clear decode arrays
         coded_block_pattern = 0;
@@ -148,6 +152,7 @@ module gg_parse_lattice_macroblock
         num_coeff_above[    WIDTH-1+32] = num_coeff_above_reg[    31]; 
         coded_block_pattern[WIDTH-1+32] = coded_block_pattern_reg[31];
         s_blk_run[          WIDTH-1+32] = s_blk_run_reg[          31];
+        s_left_oop[         WIDTH-1+32] = s_left_oop_reg[         31];
 
         // Instantiate unqiue hardware for each bit of the input
         for( int bp = WIDTH-1+32; bp >= 32; bp-- ) begin : _lattice_col
@@ -340,6 +345,10 @@ module gg_parse_lattice_macroblock
             // nC above and left maintenance
             
             begin : _num_coeff_neighborhood 
+                
+                l_oop[bp] = ( mb_start_flag[bp] ) ? left_oop[bp-32] : s_left_oop[bp];
+                s_left_oop[bp-1] = l_oop[bp];
+                
                 // Zero out nc given block skip states
                 local_left[bp][0:1]  = ( s_blk_zero[bp][0] | s_blk_zero[bp][1] ) ? 10'b0 : num_coeff_left[bp][0:1];
                 local_left[bp][2:3]  = ( s_blk_zero[bp][2] | s_blk_zero[bp][3] ) ? 10'b0 : num_coeff_left[bp][2:3];
@@ -349,17 +358,17 @@ module gg_parse_lattice_macroblock
                 local_above[bp][4:7] = ( s_blk_zero[bp][4] ) ? 20'b0 : ( mb_start_flag[bp] ) ? nc_above[4:7] : num_coeff_above[bp][4:7];
                     
                 // Calculate nC and nc_idx from nc data for given block
-                arc_nc_x2[bp][ 0] = {8{s_blk_start[bp][ 0]}} & ( ( left_oop & above_oop ) ? 0 : ( left_oop ) ? { local_above[bp][0], 1'b0 } : ( above_oop ) ? { local_left[bp][0], 1'b0 } : local_left[bp][0] + local_above[bp][0] + 1 );
-                arc_nc_x2[bp][ 1] = {8{s_blk_start[bp][ 1]}} & ( ( above_oop ) ? { local_left[bp][0], 1'b0 } : local_left[bp][0] + local_above[bp][1] + 1 );
-                arc_nc_x2[bp][ 2] = {8{s_blk_start[bp][ 2]}} & ( ( left_oop  ) ? { local_above[bp][0], 1'b0 } : local_left[bp][1] + local_above[bp][0] + 1 );
+                arc_nc_x2[bp][ 0] = {8{s_blk_start[bp][ 0]}} & ( ( l_oop[bp] & above_oop ) ? 0 : ( l_oop[bp] ) ? { local_above[bp][0], 1'b0 } : ( above_oop ) ? { local_left[bp][0], 1'b0 } : (local_left[bp][0] + local_above[bp][0] + 1) );
+                arc_nc_x2[bp][ 1] = {8{s_blk_start[bp][ 1]}} & ( ( above_oop ) ? { local_left[bp][0], 1'b0 } : ( local_left[bp][0] + local_above[bp][1] + 1 ) );
+                arc_nc_x2[bp][ 2] = {8{s_blk_start[bp][ 2]}} & ( ( l_oop[bp] ) ? { local_above[bp][0], 1'b0 } : ( local_left[bp][1] + local_above[bp][0] + 1 ) );
                 arc_nc_x2[bp][ 3] = {8{s_blk_start[bp][ 3]}} & ( local_left[bp][1] + local_above[bp][1] + 1 );
-                arc_nc_x2[bp][ 4] = {8{s_blk_start[bp][ 4]}} & ( ( above_oop ) ? { local_left[bp][0], 1'b0 } : local_left[bp][0] + local_above[bp][2] + 1 );
-                arc_nc_x2[bp][ 5] = {8{s_blk_start[bp][ 5]}} & ( ( above_oop ) ? { local_left[bp][0], 1'b0 } : local_left[bp][0] + local_above[bp][3] + 1 );
+                arc_nc_x2[bp][ 4] = {8{s_blk_start[bp][ 4]}} & ( ( above_oop ) ? { local_left[bp][0], 1'b0 } : ( local_left[bp][0] + local_above[bp][2] + 1 ) );
+                arc_nc_x2[bp][ 5] = {8{s_blk_start[bp][ 5]}} & ( ( above_oop ) ? { local_left[bp][0], 1'b0 } : ( local_left[bp][0] + local_above[bp][3] + 1 ) );
                 arc_nc_x2[bp][ 6] = {8{s_blk_start[bp][ 6]}} & ( local_left[bp][1] + local_above[bp][2] + 1 );
                 arc_nc_x2[bp][ 7] = {8{s_blk_start[bp][ 7]}} & ( local_left[bp][1] + local_above[bp][3] + 1 );
-                arc_nc_x2[bp][ 8] = {8{s_blk_start[bp][ 8]}} & ( ( left_oop ) ? { local_above[bp][0], 1'b0 } : local_left[bp][2] + local_above[bp][0] + 1 );
+                arc_nc_x2[bp][ 8] = {8{s_blk_start[bp][ 8]}} & ( ( l_oop[bp] ) ? { local_above[bp][0], 1'b0 } : ( local_left[bp][2] + local_above[bp][0] + 1 ) );
                 arc_nc_x2[bp][ 9] = {8{s_blk_start[bp][ 9]}} & ( local_left[bp][2] + local_above[bp][1] + 1 );
-                arc_nc_x2[bp][10] = {8{s_blk_start[bp][10]}} & ( ( left_oop ) ? { local_above[bp][0], 1'b0 } : local_left[bp][3] + local_above[bp][0] + 1 );
+                arc_nc_x2[bp][10] = {8{s_blk_start[bp][10]}} & ( ( l_oop[bp] ) ? { local_above[bp][0], 1'b0 } : ( local_left[bp][3] + local_above[bp][0] + 1 ) );
                 arc_nc_x2[bp][11] = {8{s_blk_start[bp][11]}} & ( local_left[bp][3] + local_above[bp][1] + 1 );
                 arc_nc_x2[bp][12] = {8{s_blk_start[bp][12]}} & ( local_left[bp][2] + local_above[bp][2] + 1 );
                 arc_nc_x2[bp][13] = {8{s_blk_start[bp][13]}} & ( local_left[bp][2] + local_above[bp][3] + 1 );
@@ -367,13 +376,13 @@ module gg_parse_lattice_macroblock
                 arc_nc_x2[bp][15] = {8{s_blk_start[bp][15]}} & ( local_left[bp][3] + local_above[bp][3] + 1 );
                 arc_nc_x2[bp][16] = {8{s_blk_start[bp][16]}} & ( 8'h40 );
                 arc_nc_x2[bp][17] = {8{s_blk_start[bp][17]}} & ( 8'h40 );
-                arc_nc_x2[bp][18] = {8{s_blk_start[bp][18]}} & ( 8'h80 | (( left_oop & above_oop ) ? 0 : ( left_oop ) ? { local_above[bp][4], 1'b0 } : ( above_oop ) ? { local_left[bp][4], 1'b0 } : local_left[bp][4] + local_above[bp][4] + 1) );
+                arc_nc_x2[bp][18] = {8{s_blk_start[bp][18]}} & ( 8'h80 | (( l_oop[bp] & above_oop ) ? 0 : ( l_oop[bp] ) ? { local_above[bp][4], 1'b0 } : ( above_oop ) ? { local_left[bp][4], 1'b0 } : ( local_left[bp][4] + local_above[bp][4] + 1) ) );
                 arc_nc_x2[bp][19] = {8{s_blk_start[bp][19]}} & ( 8'h80 | (( above_oop ) ? { local_left[bp][4], 1'b0 } : local_left[bp][4] + local_above[bp][5] + 1) );
-                arc_nc_x2[bp][20] = {8{s_blk_start[bp][20]}} & ( 8'h80 | (( left_oop  ) ? { local_above[bp][4], 1'b0 } : local_left[bp][5] + local_above[bp][4] + 1) );
+                arc_nc_x2[bp][20] = {8{s_blk_start[bp][20]}} & ( 8'h80 | (( l_oop[bp]  ) ? { local_above[bp][4], 1'b0 } : local_left[bp][5] + local_above[bp][4] + 1) );
                 arc_nc_x2[bp][21] = {8{s_blk_start[bp][21]}} & ( 8'h80 | (local_left[bp][5] + local_above[bp][5] + 1) );
-                arc_nc_x2[bp][22] = {8{s_blk_start[bp][22]}} & ( 8'h80 | (( left_oop & above_oop ) ? 0 : ( left_oop ) ? { local_above[bp][6], 1'b0 } : ( above_oop ) ? { local_left[bp][6], 1'b0 } : local_left[bp][6] + local_above[bp][6] + 1) );
-                arc_nc_x2[bp][23] = {8{s_blk_start[bp][23]}} & ( 8'h80 | (( above_oop ) ? { local_left[bp][6], 1'b0 } : local_left[bp][6] + local_above[bp][7] + 1) );
-                arc_nc_x2[bp][24] = {8{s_blk_start[bp][24]}} & ( 8'h80 | (( left_oop  ) ? { local_above[bp][6], 1'b0 } : local_left[bp][7] + local_above[bp][6] + 1) );
+                arc_nc_x2[bp][22] = {8{s_blk_start[bp][22]}} & ( 8'h80 | (( l_oop[bp] & above_oop ) ? 0 : ( l_oop[bp] ) ? { local_above[bp][6], 1'b0 } : ( above_oop ) ? { local_left[bp][6], 1'b0 } : ( local_left[bp][6] + local_above[bp][6] + 1) ) );
+                arc_nc_x2[bp][23] = {8{s_blk_start[bp][23]}} & ( 8'h80 | (( above_oop ) ? { local_left[bp][6], 1'b0 } : ( local_left[bp][6] + local_above[bp][7] + 1) ) );
+                arc_nc_x2[bp][24] = {8{s_blk_start[bp][24]}} & ( 8'h80 | (( l_oop[bp]  ) ? { local_above[bp][6], 1'b0 } : ( local_left[bp][7] + local_above[bp][6] + 1) ) );
                 arc_nc_x2[bp][25] = {8{s_blk_start[bp][25]}} & ( 8'h80 | (local_left[bp][7] + local_above[bp][7] + 1) );
                 
                 nc_x2[bp] = arc_nc_x2[bp][ 0] | arc_nc_x2[bp][ 1] | arc_nc_x2[bp][ 2] | arc_nc_x2[bp][ 3] | arc_nc_x2[bp][ 4] |
@@ -659,7 +668,7 @@ module gg_parse_lattice_macroblock
                 num_coeff_above[bp-1][0] = ( s_blk_start[bp][ 0] | s_blk_start[bp][ 2] | s_blk_start[bp][ 8] | s_blk_start[bp][10] ) ? num_coeff[bp] : local_above[bp][0];
                 num_coeff_above[bp-1][1] = ( s_blk_start[bp][ 1] | s_blk_start[bp][ 3] | s_blk_start[bp][ 9] | s_blk_start[bp][11] ) ? num_coeff[bp] : local_above[bp][1];
                 num_coeff_above[bp-1][2] = ( s_blk_start[bp][ 4] | s_blk_start[bp][ 6] | s_blk_start[bp][12] | s_blk_start[bp][14] ) ? num_coeff[bp] : local_above[bp][2];
-                num_coeff_above[bp-1][3] = ( s_blk_start[bp][ 5] | s_blk_start[bp][ 5] | s_blk_start[bp][13] | s_blk_start[bp][15] ) ? num_coeff[bp] : local_above[bp][3];
+                num_coeff_above[bp-1][3] = ( s_blk_start[bp][ 5] | s_blk_start[bp][ 7] | s_blk_start[bp][13] | s_blk_start[bp][15] ) ? num_coeff[bp] : local_above[bp][3];
                 num_coeff_above[bp-1][4] = ( s_blk_start[bp][18] | s_blk_start[bp][20] ) ? num_coeff[bp] : local_above[bp][4];
                 num_coeff_above[bp-1][5] = ( s_blk_start[bp][19] | s_blk_start[bp][21] ) ? num_coeff[bp] : local_above[bp][5];
                 num_coeff_above[bp-1][6] = ( s_blk_start[bp][22] | s_blk_start[bp][24] ) ? num_coeff[bp] : local_above[bp][6];
@@ -678,6 +687,7 @@ module gg_parse_lattice_macroblock
     always_ff @(posedge clk) begin // Lower 32 set of states are flopped  
         if( reset ) begin
             // Handle the single bit step cases
+            s_left_oop_reg[31] <= 0;
             s_blk_run_reg[31] <= 0;
             coded_block_pattern_reg[31] <= 0;     
             num_coeff_left_reg[31] <= 0;          
@@ -689,6 +699,7 @@ module gg_parse_lattice_macroblock
             pcm_cnt_reg <= 0;
         end else begin
             // Save the single step cases
+            s_left_oop_reg[31]          <= s_left_oop[31];
             s_blk_run_reg[31]           <= s_blk_run[31];
             coded_block_pattern_reg[31] <= coded_block_pattern[31];
             num_coeff_left_reg[31]      <= num_coeff_left[31];          

@@ -104,6 +104,7 @@ module gg_parse_lattice
         arc_run_before = 0;
     
         // Clear state
+        s_last = 0;
         s_level_ch = 0;
         s_level_y = 0;
         s_coeff_token = 0;

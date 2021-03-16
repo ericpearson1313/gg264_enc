@@ -79,6 +79,11 @@ module gg_parse_lattice_rowslice
     logic [WIDTH+31:0]                      s_last;
     logic       [31:31]                      s_last_reg; 
     
+    logic [WIDTH+31:0]                      s_left_oop;
+    logic       [31:31]                      s_left_oop_reg; 
+    
+    
+    
     logic [WIDTH+31:0][0:15]            ue_prefix;
     logic [WIDTH+31:0]                  more_rbsp;
     
@@ -110,10 +115,14 @@ module gg_parse_lattice_rowslice
         s_slice_syntax = 0;
         s_last = 0;
         s_mb_start = 0;
+        s_left_oop = 0;
 
         // Clear decode arrays
         ue_prefix = 0;
         more_rbsp = 0;
+        
+        // Feedback register
+        s_left_oop[WIDTH-1+32] = s_left_oop_reg[31];
 
         // Instantiate unqiue hardware for each bit of the input
         for( int bp = WIDTH-1+32; bp >= 32; bp-- ) begin : _slice_lattice_col
@@ -188,6 +197,8 @@ module gg_parse_lattice_rowslice
                 arc_last[bp-1-(bp%8)][bp%8+8] = !more_rbsp[bp] & mb_end_flag[bp];
                 // slice end Reduction OR
                 s_last[bp] = |arc_last[bp] | ((bp == WIDTH+31) ? s_last_reg[31] : 1'b0 ); // Reduction OR
+                // OOP Flag, set at slice start, clear after 1st mb
+                s_left_oop[bp-1] = ( slice_start_flag[bp] ) ? 1'b1 : ( s_mb_start[bp] ) ? 1'b0 : s_left_oop[bp];
             end // _slice_data_syntax
         end // bp
     end // _lattice
@@ -198,6 +209,7 @@ module gg_parse_lattice_rowslice
             slice_end[BYTE_WIDTH-1-ii] = s_last[WIDTH+32-1-ii*8];
         end
         mb_start[WIDTH-1:0] = s_mb_start[WIDTH+32-1:32];
+        mb_left_oop[WIDTH-1:0] = s_left_oop[WIDTH+32-1:32];
     end
     
     always_ff @(posedge clk) begin // Lower 32 set of states are flopped  
@@ -206,8 +218,10 @@ module gg_parse_lattice_rowslice
             s_slice_more_rbsp_reg <= 0;
             s_slice_syntax_reg <= 0; 
             s_last_reg <= 0;  
+            s_left_oop_reg <= 0; 
         end else begin
             // Handle the variable lenght arcs (up to 31 bits)
+            s_left_oop_reg[31] <= s_left_oop[31];
             s_last_reg[31] <= |arc_last[31]; // Can only occur on 1st padding bit
             for( int bp = 31; bp >= 0; bp-- ) begin
                 s_slice_more_rbsp_reg[bp] <= |arc_slice_more_rbsp[bp]; // Reduction OR

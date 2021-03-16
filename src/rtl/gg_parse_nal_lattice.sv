@@ -91,7 +91,7 @@ module gg_parse_nal_lattice
         p_slice          = 0;
 
         // Clear outputs
-        nal_end_flag     = 0;
+        //nal_end_flag     = 0;
         slice_start_flag = 0;
         
         // Set first bit input
@@ -139,6 +139,7 @@ module gg_parse_nal_lattice
     end // _lattice
 
     // Connect up the output bits
+    assign nal_end_flag = slice_end_flag; // just show slice process completion, as nal processing is continuous.
     assign nal_end = nal_end_flag[BYTE_WIDTH+3:4];
     assign slice_start = slice_start_flag[BYTE_WIDTH+3:4];
 
