@@ -36,7 +36,8 @@ module gg_parse_lattice_macroblock
     input  logic [WIDTH-1:0] mb_start, // Input trigger
     output logic [WIDTH-1:0] mb_end, // a single 1-hot bit indicating block end
     // MB neighborhood info
-    input  logic [WIDTH-1:0] left_oop,  
+    input  logic [WIDTH-1:0] left_oop,
+    input  logic [WIDTH-1:0] left_skip, // used to clear left num_coeff vals on mb_start.  
     input  logic above_oop,
     input  logic [0:7][4:0] nc_left , // Y: 0-3 Cb: 4-5 Cr: 6-7
     input  logic [0:7][4:0] nc_above,
@@ -68,6 +69,7 @@ module gg_parse_lattice_macroblock
     parameter MB_SYNTAX_RESIDUAL   = 13;    
     parameter MB_SYNTAX_COUNT      = 14;
 
+ 
  
     logic [WIDTH+31:0]                 s_left_oop;
     logic       [31:31]                s_left_oop_reg;
@@ -350,11 +352,11 @@ module gg_parse_lattice_macroblock
                 s_left_oop[bp-1] = l_oop[bp];
                 
                 // Zero out nc given block skip states
-                local_left[bp][0:1]  = ( s_blk_zero[bp][0] | s_blk_zero[bp][1] ) ? 10'b0 : num_coeff_left[bp][0:1];
-                local_left[bp][2:3]  = ( s_blk_zero[bp][2] | s_blk_zero[bp][3] ) ? 10'b0 : num_coeff_left[bp][2:3];
+                local_left[bp][0:1]  = ( s_blk_zero[bp][0] | s_blk_zero[bp][1] | ( mb_start_flag[bp] & left_skip[bp-32] ) ) ? 10'b0 : num_coeff_left[bp][0:1];
+                local_left[bp][2:3]  = ( s_blk_zero[bp][2] | s_blk_zero[bp][3] | ( mb_start_flag[bp] & left_skip[bp-32] ) ) ? 10'b0 : num_coeff_left[bp][2:3];
                 local_above[bp][0:1] = ( s_blk_zero[bp][0] | s_blk_zero[bp][2] ) ? 10'b0 : ( mb_start_flag[bp] ) ? nc_above[0:1] : num_coeff_above[bp][0:1];
                 local_above[bp][2:3] = ( s_blk_zero[bp][1] | s_blk_zero[bp][3] ) ? 10'b0 : ( mb_start_flag[bp] ) ? nc_above[2:3] : num_coeff_above[bp][2:3];
-                local_left[bp][4:7]  = ( s_blk_zero[bp][4] ) ? 20'b0 : num_coeff_left[bp][4:7];
+                local_left[bp][4:7]  = ( s_blk_zero[bp][4] | ( mb_start_flag[bp] & left_skip[bp-32] ) ) ? 20'b0 : num_coeff_left[bp][4:7];
                 local_above[bp][4:7] = ( s_blk_zero[bp][4] ) ? 20'b0 : ( mb_start_flag[bp] ) ? nc_above[4:7] : num_coeff_above[bp][4:7];
                     
                 // Calculate nC and nc_idx from nc data for given block

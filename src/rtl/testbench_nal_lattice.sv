@@ -8,6 +8,7 @@ module testbench_nal_lattice(
     //parameter WID = 128;
     parameter WID = 128;
     parameter BYTE_WID = WID / 8;
+    parameter FILE_SKIP_BYTES = 2640; // advance to 2nd frame: 2000000121f76039fef4bd8d880e1c07
 
     
     //////////////////////
@@ -33,6 +34,7 @@ module testbench_nal_lattice(
     logic [WID-1:0] mb_start; // a single 1-hot bit indicating block end
     logic [WID-1:0] mb_end; // a single 1-hot bit indicating block end
     logic [WID-1:0] left_oop;
+    logic [WID-1:0] left_skip;
     logic [BYTE_WID-1:0] slice_start; // byte aligned input trigger 
     logic [BYTE_WID-1:0] slice_end; // byte aligned completion      
     logic [BYTE_WID-1:0] nal_start; // byte aligned input trigger 
@@ -71,6 +73,7 @@ module testbench_nal_lattice(
         // macroblock lattice interface
         .mb_above_oop( ),
         .mb_left_oop( left_oop ),
+        .mb_left_skip( left_skip ),
         .mb_start( mb_start ), 
         .mb_end( mb_end )
     );
@@ -87,6 +90,7 @@ module testbench_nal_lattice(
         .mb_start( mb_start ), 
         .mb_end( mb_end ),
         // MB neighborhood info
+        .left_skip( left_skip ),
         .left_oop( left_oop ),  
         .above_oop( 1'b1 ),
         .nc_left( 40'b0 ),
@@ -165,6 +169,11 @@ module testbench_nal_lattice(
         // foreman_qcif_rowslice.264 is 14KB, QCIF 2I+20P frame low quality (qp40) H.264 bitstream
         // It is intended for a low-est latency and employs column refresh P frames, and row slices.
         fd = $fopen( "C:/Users/ecp/Documents/gg264_enc/src/test/foreman_qcif_rowslice.264", "rb"); // verified no emulation bytes 0x03
+        
+        // skip bytes at beginning of file for debug
+        for( int ii = 0; ii < FILE_SKIP_BYTES; ii++ ) begin
+            $fgetc(fd);
+        end
         
         bits = 0;
         pad = 0;

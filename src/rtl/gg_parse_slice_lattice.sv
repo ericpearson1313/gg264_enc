@@ -45,6 +45,7 @@ module gg_parse_lattice_rowslice
     output logic [BYTE_WIDTH-1:0] slice_end, // byte aligned completion
     // macroblock lattice interface 
     output logic             mb_above_oop, // alays 1 for a row slice!
+    output logic [WIDTH-1:0] mb_left_skip, // sent with mb_start, if preceeding skip_run != 0
     output logic [WIDTH-1:0] mb_left_oop,  
     output logic [WIDTH-1:0] mb_start, // macroblock parse trigger
     input  logic [WIDTH-1:0] mb_end // macroblock end pulse    
@@ -69,9 +70,9 @@ module gg_parse_lattice_rowslice
     logic       [31:0][0:12]           s_slice_syntax_reg; // macroblock syntax elements 
     logic [WIDTH+31:0][0:12][0:16]   arc_slice_syntax; // [syntax element][ue/se prefix length] 
 
-    logic [WIDTH+31:0][0:15]    arc_slice_more_rbsp;
-    logic [WIDTH+31:0]            s_slice_more_rbsp;
-    logic       [31:0]            s_slice_more_rbsp_reg; 
+    logic [WIDTH+31:0][0:15][1:0]    arc_slice_more_rbsp;
+    logic [WIDTH+31:0][1:0]          s_slice_more_rbsp;
+    logic       [31:0][1:0]          s_slice_more_rbsp_reg; 
      
     logic [WIDTH+31:0]               s_mb_start;    
   
@@ -79,6 +80,8 @@ module gg_parse_lattice_rowslice
     logic [WIDTH+31:0]                      s_last;
     logic       [31:31]                      s_last_reg; 
     
+    
+    logic [WIDTH+31:0]                      s_left_skip;
     logic [WIDTH+31:0]                      s_left_oop;
     logic       [31:31]                      s_left_oop_reg; 
     
@@ -116,6 +119,7 @@ module gg_parse_lattice_rowslice
         s_last = 0;
         s_mb_start = 0;
         s_left_oop = 0;
+        s_left_skip = 0;
 
         // Clear decode arrays
         ue_prefix = 0;
@@ -188,11 +192,13 @@ module gg_parse_lattice_rowslice
                 for( int pl=0; pl < 16; pl++ ) begin
                     arc_slice_more_rbsp[bp-(pl*2+1)][pl] = ue_prefix[bp][pl] & more_rbsp[bp] & mb_end_flag[bp];   
                 end // pl
-                s_slice_more_rbsp[bp] = |arc_slice_more_rbsp[bp] | s_slice_syntax[bp][SLICE_SYNTAX_SKIP_RUN] | ((bp >= WIDTH) ? s_slice_more_rbsp_reg[bp-WIDTH] : 1'b0 ); // Reduction OR
+                s_slice_more_rbsp[bp][0] = |arc_slice_more_rbsp[bp][0   ] | s_slice_syntax[bp][SLICE_SYNTAX_SKIP_RUN] | ((bp >= WIDTH) ? s_slice_more_rbsp_reg[bp-WIDTH][0] : 1'b0 ); // Reduction OR
+                s_slice_more_rbsp[bp][1] = |arc_slice_more_rbsp[bp][1:15] | s_slice_syntax[bp][SLICE_SYNTAX_SKIP_RUN] | ((bp >= WIDTH) ? s_slice_more_rbsp_reg[bp-WIDTH][1] : 1'b0 ); // Reduction OR
                 // exit(1) if NO more rbsp after skip run
-                arc_last[bp-1-(bp%8)][bp%8] = !more_rbsp[bp] & s_slice_more_rbsp[bp]; 
+                arc_last[bp-1-(bp%8)][bp%8] = !more_rbsp[bp] & |s_slice_more_rbsp[bp]; 
                 // if more rbsp start mb
-                s_mb_start[bp] = more_rbsp[bp] & s_slice_more_rbsp[bp];
+                s_mb_start[bp] = more_rbsp[bp] & |s_slice_more_rbsp[bp];
+                s_left_skip[bp] = more_rbsp[bp] & s_slice_more_rbsp[bp][1];  // preceeding non-zero skip_run
                 // exit(2) if NO more rbsp after mb end                        
                 arc_last[bp-1-(bp%8)][bp%8+8] = !more_rbsp[bp] & mb_end_flag[bp];
                 // slice end Reduction OR
@@ -210,6 +216,7 @@ module gg_parse_lattice_rowslice
         end
         mb_start[WIDTH-1:0] = s_mb_start[WIDTH+32-1:32];
         mb_left_oop[WIDTH-1:0] = s_left_oop[WIDTH+32-1:32];
+        mb_left_skip[WIDTH-1:0] = s_left_skip[WIDTH+32-1:32];
     end
     
     always_ff @(posedge clk) begin // Lower 32 set of states are flopped  
@@ -224,7 +231,8 @@ module gg_parse_lattice_rowslice
             s_left_oop_reg[31] <= s_left_oop[31];
             s_last_reg[31] <= |arc_last[31]; // Can only occur on 1st padding bit
             for( int bp = 31; bp >= 0; bp-- ) begin
-                s_slice_more_rbsp_reg[bp] <= |arc_slice_more_rbsp[bp]; // Reduction OR
+                s_slice_more_rbsp_reg[bp][0] <= |arc_slice_more_rbsp[bp][0]; // Reduction OR
+                s_slice_more_rbsp_reg[bp][1] <= |arc_slice_more_rbsp[bp][1:15]; // Reduction OR
                 for( int ii = 0; ii < SLICE_SYNTAX_COUNT; ii++ ) begin
                     s_slice_syntax_reg[bp][ii] <= |arc_slice_syntax[bp][ii]; // Reduction OR
                 end
