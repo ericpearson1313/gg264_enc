@@ -69,6 +69,8 @@ module gg_parse_nal_lattice
     logic [BYTE_WIDTH+3:0] nal_start_flag;
     logic [BYTE_WIDTH+3:0] slice_end_flag;
     logic [BYTE_WIDTH+3:0] slice_start_flag;
+    logic                  slice_start_flag_reg;
+    
     
     // Set up array inputs
     assign bits = { in_bits, in_pad };
@@ -96,6 +98,7 @@ module gg_parse_nal_lattice
         
         // Set first bit input
         s_search_run[BYTE_WIDTH-1+4] = s_search_run_reg;
+        slice_start_flag[BYTE_WIDTH-1+4] = slice_start_flag_reg;
         
         // Instantiate unqiue hardware for each byte msb bit of the input
         for( int bp = BYTE_WIDTH-1+4; bp >= 4; bp-- ) begin : _slice_lattice_col
@@ -149,9 +152,11 @@ module gg_parse_nal_lattice
             // Handle variable length codes   
             s_nal_type_reg <= 0;
             s_search_run_reg <= 0;
+            slice_start_flag_reg <= 0;
         end else begin
             // Handle the variable lenght arcs (up to 31 bits)
-            s_search_run_reg <= ( s_search_start[4]  | s_search_run[4] ) & !start_code[4];
+            s_search_run_reg     <= ( s_search_start[4]  | s_search_run[4] ) & !start_code[4];
+            slice_start_flag_reg <= slice_start_flag[3];
             for( int bp = 3; bp > 0; bp-- ) begin
                 s_nal_type_reg[bp] <= arc_nal_type[bp];
             end // bp
