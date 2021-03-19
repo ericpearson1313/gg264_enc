@@ -51,40 +51,39 @@ module gg_parse_lattice_rowslice
     input  logic [WIDTH-1:0] mb_end // macroblock end pulse    
     );
 
-    parameter SLICE_SYNTAX_FIRST_MB   = 0;  // first_mb_in_slice ue(v)
-    parameter SLICE_SYNTAX_SLICE_TYPE = 1; // slice_type ue(v) 0=P Slice
-    parameter SLICE_SYNTAX_PARAM_ID   = 2; // pic_parameter_set_id ue(v)
-    parameter SLICE_SYNTAX_FRAME_NUM  = 3; // frame_num u(v=4)
-    parameter SLICE_SYNTAX_POC_LSB    = 4; // pic_order_cnt_lsb u(v=4)
-    parameter SLICE_SYNTAX_REF_OVR_FL = 5; // num_ref_idx_active_override_flag u(1)
-    parameter SLICE_SYNTAX_REF_MOD_FL = 6; // ref_pic_list_modification_flag_l0 u(1)
-    parameter SLICE_SYNTAX_REF_MARK_FL= 7; // adaptive_ref_pic_marking_mode_flag u(1)
-    parameter SLICE_SYNTAX_QP_DELTA   = 8; // slice_qp_delta se(v) 
-    parameter SLICE_SYNTAX_DBLK_IDC   = 9; // disable_deblocking_filter_idc ue(v)
-    parameter SLICE_SYNTAX_DBLK_ALPHA = 10; // != 1 --> slice_alpha_c0_offset_div2 se(v)
-    parameter SLICE_SYNTAX_DBLK_BETA  = 11; // != 1 --> slice_beta_offset_div2 se(v)
-    parameter SLICE_SYNTAX_SKIP_RUN   = 12; // mb_skip_run ue(v)
-    parameter SLICE_SYNTAX_COUNT      = 13;
+    parameter SLICE_SYNTAX_SLICE_TYPE = 0 ; // slice_type ue(v) 0=P Slice
+    parameter SLICE_SYNTAX_PARAM_ID   = 1 ; // pic_parameter_set_id ue(v)
+    parameter SLICE_SYNTAX_FRAME_NUM  = 2 ; // frame_num u(v=4)
+    parameter SLICE_SYNTAX_POC_LSB    = 3 ; // pic_order_cnt_lsb u(v=4)
+    parameter SLICE_SYNTAX_REF_OVR_FL = 4 ; // num_ref_idx_active_override_flag u(1)
+    parameter SLICE_SYNTAX_REF_MOD_FL = 5 ; // ref_pic_list_modification_flag_l0 u(1)
+    parameter SLICE_SYNTAX_REF_MARK_FL= 6 ; // adaptive_ref_pic_marking_mode_flag u(1)
+    parameter SLICE_SYNTAX_QP_DELTA   = 7 ; // slice_qp_delta se(v) 
+    parameter SLICE_SYNTAX_DBLK_IDC   = 8 ; // disable_deblocking_filter_idc ue(v)
+    parameter SLICE_SYNTAX_DBLK_ALPHA = 9 ; // != 1 --> slice_alpha_c0_offset_div2 se(v)
+    parameter SLICE_SYNTAX_DBLK_BETA  = 10; // != 1 --> slice_beta_offset_div2 se(v)
+    parameter SLICE_SYNTAX_SKIP_RUN   = 11; // first mb_skip_run ue(v)
+    parameter SLICE_SYNTAX_MB_START_0 = 12; // first MB in slice, skip=0
+    parameter SLICE_SYNTAX_MB_START_1 = 13; // first MB in slice, skip>=1
+    parameter SLICE_SYNTAX_MB_START_2 = 14; // MB in slice, skip=0
+    parameter SLICE_SYNTAX_MB_START_3 = 15; // MB in slice, skip>=1
+    
+    parameter SLICE_SYNTAX_COUNT      = 16;
 
-    logic [WIDTH+31:0][0:12]           s_slice_syntax; // macroblock syntax elements 
-    logic       [31:0][0:12]           s_slice_syntax_reg; // macroblock syntax elements 
-    logic [WIDTH+31:0][0:12][0:16]   arc_slice_syntax; // [syntax element][ue/se prefix length] 
+    logic [WIDTH+31:0][0:SLICE_SYNTAX_COUNT-1]           s_slice_syntax; // macroblock syntax elements 
+    logic       [31:0][0:SLICE_SYNTAX_COUNT-1]           s_slice_syntax_reg; // macroblock syntax elements 
+    logic [WIDTH+31:0][0:SLICE_SYNTAX_COUNT-1][0:16]   arc_slice_syntax; // [syntax element][ue/se prefix length] 
 
-    logic [WIDTH+31:0][0:15][1:0]    arc_slice_more_rbsp;
-    logic [WIDTH+31:0][1:0]          s_slice_more_rbsp;
-    logic       [31:0][1:0]          s_slice_more_rbsp_reg; 
-     
-    logic [WIDTH+31:0]               s_mb_start;    
-  
+    logic [WIDTH+31:32]                      s_mb_start;    
+    logic [WIDTH+31:32]                      s_left_skip;
+    logic [WIDTH+31:32]                      s_left_oop;
+      
     logic [WIDTH+31:0][0:15]               arc_last;
     logic [WIDTH+31:0]                      s_last;
     logic       [31:31]                      s_last_reg; 
     
     
-    logic [WIDTH+31:0]                      s_left_skip;
-    logic [WIDTH+31:0]                      s_left_oop;
-    logic       [31:31]                      s_left_oop_reg; 
-    
+
     
     
     logic [WIDTH+31:0][0:15]            ue_prefix;
@@ -110,11 +109,9 @@ module gg_parse_lattice_rowslice
         
         // Clear state arcs
         arc_slice_syntax = 0;
-        arc_slice_more_rbsp = 0;
         arc_last = 0;
     
         // Clear state
-        s_slice_more_rbsp = 0;
         s_slice_syntax = 0;
         s_last = 0;
         s_mb_start = 0;
@@ -125,9 +122,6 @@ module gg_parse_lattice_rowslice
         ue_prefix = 0;
         more_rbsp = 0;
         
-        // Feedback register
-        s_left_oop[WIDTH-1+32] = s_left_oop_reg[31];
-
         // Instantiate unqiue hardware for each bit of the input
         for( int bp = WIDTH-1+32; bp >= 32; bp-- ) begin : _slice_lattice_col
             begin : _ue_prefix
@@ -149,28 +143,47 @@ module gg_parse_lattice_rowslice
                 ue_prefix[bp][15] =( bits[bp-:16] == 16'b0000000000000001 ) ? 1'b1 : 1'b0; 
             end // ue prefix
 
-            begin : _slice_header_syntax 
+            begin : _more_rbsp
+                more_rbsp[bp] =(( bp % 8 == 3'd7 ) && bits[bp-:31] == 31'b10000000_00000000_00000000_0000000 ||
+                                ( bp % 8 == 3'd6 ) && bits[bp-:30] == 30'b_1000000_00000000_00000000_0000000 ||
+                                ( bp % 8 == 3'd5 ) && bits[bp-:29] == 29'b__100000_00000000_00000000_0000000 ||
+                                ( bp % 8 == 3'd4 ) && bits[bp-:28] == 28'b___10000_00000000_00000000_0000000 ||
+                                ( bp % 8 == 3'd3 ) && bits[bp-:27] == 27'b____1000_00000000_00000000_0000000 ||
+                                ( bp % 8 == 3'd2 ) && bits[bp-:26] == 26'b_____100_00000000_00000000_0000000 ||
+                                ( bp % 8 == 3'd1 ) && bits[bp-:25] == 25'b______10_00000000_00000000_0000000 ||
+                                ( bp % 8 == 3'd0 ) && bits[bp-:24] == 24'b_______1_00000000_00000000_0000000 ) ? 1'b0 : 1'b1; // inverted
+            end // more_rbsp
+
+
+
+            begin : _slice_syntax 
                 // Reduction OR the current arcs and previous registered ones too.           
                 for( int ii = 0; ii < SLICE_SYNTAX_COUNT; ii++ ) begin
                     s_slice_syntax[bp][ii] = |arc_slice_syntax[bp][ii] | ((bp >= WIDTH) ? s_slice_syntax_reg[bp-WIDTH][ii] : 1'b0 ); // Reduction OR
                 end
                 // handle UE/SE (assume max 15 prefix length
                 for( int pl=0; pl < 16; pl++ ) begin
-                    arc_slice_syntax[bp-(pl*2+1)][SLICE_SYNTAX_FIRST_MB   /* ue() */ ][pl] = ue_prefix[bp][pl] & slice_start_flag[bp];   
-                    arc_slice_syntax[bp-(pl*2+1)][SLICE_SYNTAX_SLICE_TYPE /* ue() */ ][pl] = ue_prefix[bp][pl] & s_slice_syntax[bp][SLICE_SYNTAX_FIRST_MB];
-                    arc_slice_syntax[bp-(pl*2+1)][SLICE_SYNTAX_PARAM_ID   /* ue() */ ][pl] = ue_prefix[bp][pl] & s_slice_syntax[bp][SLICE_SYNTAX_SLICE_TYPE];   
-                    arc_slice_syntax[bp-(pl*2+1)][SLICE_SYNTAX_QP_DELTA   /* se() */ ][pl] = ue_prefix[bp][pl] & s_slice_syntax[bp][SLICE_SYNTAX_REF_MARK_FL];   
-                    arc_slice_syntax[bp-(pl*2+1)][SLICE_SYNTAX_DBLK_IDC   /* ue() */ ][pl] = ue_prefix[bp][pl] & s_slice_syntax[bp][SLICE_SYNTAX_QP_DELTA];   
-                    arc_slice_syntax[bp-(pl*2+1)][SLICE_SYNTAX_DBLK_BETA  /* se() */ ][pl] = ue_prefix[bp][pl] & s_slice_syntax[bp][SLICE_SYNTAX_DBLK_ALPHA];   
-                    arc_slice_syntax[bp-(pl*2+1)][SLICE_SYNTAX_SKIP_RUN   /* ue() */ ][pl] = ue_prefix[bp][pl] & s_slice_syntax[bp][SLICE_SYNTAX_DBLK_BETA];   
+                    arc_slice_syntax[bp-(pl*2+1)][SLICE_SYNTAX_SLICE_TYPE     ][pl] = ue_prefix[bp][pl] & slice_start_flag[bp]; // first_mb_in_slice  ue(v)   
+                    arc_slice_syntax[bp-(pl*2+1)][SLICE_SYNTAX_PARAM_ID       ][pl] = ue_prefix[bp][pl] & s_slice_syntax[bp][SLICE_SYNTAX_SLICE_TYPE];   
+                    arc_slice_syntax[bp-(pl*2+1)][SLICE_SYNTAX_FRAME_NUM      ][pl] = ue_prefix[bp][pl] & s_slice_syntax[bp][SLICE_SYNTAX_PARAM_ID];   
+                    arc_slice_syntax[bp-(pl*2+1)][SLICE_SYNTAX_DBLK_IDC       ][pl] = ue_prefix[bp][pl] & s_slice_syntax[bp][SLICE_SYNTAX_QP_DELTA];   
+                    arc_slice_syntax[bp-(pl*2+1)][SLICE_SYNTAX_DBLK_BETA      ][pl] = ue_prefix[bp][pl] & s_slice_syntax[bp][SLICE_SYNTAX_DBLK_ALPHA];   
+                    arc_slice_syntax[bp-(pl*2+1)][SLICE_SYNTAX_SKIP_RUN       ][pl] = ue_prefix[bp][pl] & s_slice_syntax[bp][SLICE_SYNTAX_DBLK_BETA];  
+                    if( pl == 0 ) begin
+                        arc_slice_syntax[bp-(pl*2+1)][SLICE_SYNTAX_MB_START_0 ][pl] = ue_prefix[bp][pl] & s_slice_syntax[bp][SLICE_SYNTAX_SKIP_RUN];  
+                        arc_slice_syntax[bp-(pl*2+1)][SLICE_SYNTAX_MB_START_2 ][pl] = ue_prefix[bp][pl] & more_rbsp[bp] & mb_end_flag[bp];  
+                    end else begin
+                        arc_slice_syntax[bp-(pl*2+1)][SLICE_SYNTAX_MB_START_1 ][pl] = ue_prefix[bp][pl] & s_slice_syntax[bp][SLICE_SYNTAX_SKIP_RUN];  
+                        arc_slice_syntax[bp-(pl*2+1)][SLICE_SYNTAX_MB_START_3 ][pl] = ue_prefix[bp][pl] & more_rbsp[bp] & mb_end_flag[bp];  
+                    end
                 end // pl
                 
                 // Handle fixed length cases
-                arc_slice_syntax[bp-4][SLICE_SYNTAX_FRAME_NUM  /* u(4) */ ][0] = s_slice_syntax[bp][SLICE_SYNTAX_PARAM_ID];   
-                arc_slice_syntax[bp-4][SLICE_SYNTAX_POC_LSB    /* u(4) */ ][0] = s_slice_syntax[bp][SLICE_SYNTAX_FRAME_NUM];  
-                arc_slice_syntax[bp-1][SLICE_SYNTAX_REF_OVR_FL /* u(1) */ ][0] = s_slice_syntax[bp][SLICE_SYNTAX_POC_LSB];    
-                arc_slice_syntax[bp-1][SLICE_SYNTAX_REF_MOD_FL /* u(1) */ ][0] = s_slice_syntax[bp][SLICE_SYNTAX_REF_OVR_FL];   
-                arc_slice_syntax[bp-1][SLICE_SYNTAX_REF_MARK_FL/* u(1) */ ][0] = s_slice_syntax[bp][SLICE_SYNTAX_REF_MOD_FL];   
+                arc_slice_syntax[bp-4][SLICE_SYNTAX_POC_LSB    ][0] = s_slice_syntax[bp][SLICE_SYNTAX_FRAME_NUM];   
+                arc_slice_syntax[bp-4][SLICE_SYNTAX_REF_OVR_FL ][0] = s_slice_syntax[bp][SLICE_SYNTAX_POC_LSB];  
+                arc_slice_syntax[bp-1][SLICE_SYNTAX_REF_MOD_FL ][0] = s_slice_syntax[bp][SLICE_SYNTAX_REF_OVR_FL];    
+                arc_slice_syntax[bp-1][SLICE_SYNTAX_REF_MARK_FL][0] = s_slice_syntax[bp][SLICE_SYNTAX_REF_MOD_FL];   
+                arc_slice_syntax[bp-1][SLICE_SYNTAX_QP_DELTA   ][0] = s_slice_syntax[bp][SLICE_SYNTAX_REF_MARK_FL];   
                     
                 // Handle deblock IDC branching
                 arc_slice_syntax[bp-1][SLICE_SYNTAX_DBLK_ALPHA /* se() */  ][0] = (bits[bp-:1] == 1'b1  ) & s_slice_syntax[bp][SLICE_SYNTAX_DBLK_IDC];   // DEBLK_IDC == 0
@@ -178,33 +191,25 @@ module gg_parse_lattice_rowslice
                 arc_slice_syntax[bp-3][SLICE_SYNTAX_SKIP_RUN   /* ue() */  ][16]= (bits[bp-:3] == 3'b010) & s_slice_syntax[bp][SLICE_SYNTAX_DBLK_IDC];   // DEBLK_IDC == 1
             end // mv
 
-            more_rbsp[bp] =(( bp % 8 == 3'd7 ) && bits[bp-:31] == 31'b10000000_00000000_00000000_0000000 ||
-                            ( bp % 8 == 3'd6 ) && bits[bp-:30] == 30'b_1000000_00000000_00000000_0000000 ||
-                            ( bp % 8 == 3'd5 ) && bits[bp-:29] == 29'b__100000_00000000_00000000_0000000 ||
-                            ( bp % 8 == 3'd4 ) && bits[bp-:28] == 28'b___10000_00000000_00000000_0000000 ||
-                            ( bp % 8 == 3'd3 ) && bits[bp-:27] == 27'b____1000_00000000_00000000_0000000 ||
-                            ( bp % 8 == 3'd2 ) && bits[bp-:26] == 26'b_____100_00000000_00000000_0000000 ||
-                            ( bp % 8 == 3'd1 ) && bits[bp-:25] == 25'b______10_00000000_00000000_0000000 ||
-                            ( bp % 8 == 3'd0 ) && bits[bp-:24] == 24'b_______1_00000000_00000000_0000000 ) ? 1'b0 : 1'b1;
 
-            begin : _slice_data_syntax // Handle the row macroblocks until !more_rbsp_data(), inclding skip runs
-                // Skip run after header and then after each MB if more RBSP available
-                for( int pl=0; pl < 16; pl++ ) begin
-                    arc_slice_more_rbsp[bp-(pl*2+1)][pl] = ue_prefix[bp][pl] & more_rbsp[bp] & mb_end_flag[bp];   
-                end // pl
-                s_slice_more_rbsp[bp][0] = |arc_slice_more_rbsp[bp][0   ] | s_slice_syntax[bp][SLICE_SYNTAX_SKIP_RUN] | ((bp >= WIDTH) ? s_slice_more_rbsp_reg[bp-WIDTH][0] : 1'b0 ); // Reduction OR
-                s_slice_more_rbsp[bp][1] = |arc_slice_more_rbsp[bp][1:15] | s_slice_syntax[bp][SLICE_SYNTAX_SKIP_RUN] | ((bp >= WIDTH) ? s_slice_more_rbsp_reg[bp-WIDTH][1] : 1'b0 ); // Reduction OR
-                // exit(1) if NO more rbsp after skip run
-                arc_last[bp-1-(bp%8)][bp%8] = !more_rbsp[bp] & |s_slice_more_rbsp[bp]; 
-                // if more rbsp start mb
-                s_mb_start[bp] = more_rbsp[bp] & |s_slice_more_rbsp[bp];
-                s_left_skip[bp] = more_rbsp[bp] & s_slice_more_rbsp[bp][1];  // preceeding non-zero skip_run
-                // exit(2) if NO more rbsp after mb end                        
-                arc_last[bp-1-(bp%8)][bp%8+8] = !more_rbsp[bp] & mb_end_flag[bp];
+            begin : _slice_macroblock_start_end // Handle the row macroblocks until !more_rbsp_data(), inclding skip runs
+                // After each skip run, if more rbsp start mb
+                s_mb_start[bp]  = s_slice_syntax[bp][SLICE_SYNTAX_MB_START_0]                 | 
+                                  s_slice_syntax[bp][SLICE_SYNTAX_MB_START_1] & more_rbsp[bp] |
+                                  s_slice_syntax[bp][SLICE_SYNTAX_MB_START_2]                 |
+                                  s_slice_syntax[bp][SLICE_SYNTAX_MB_START_3] & more_rbsp[bp] ;
+                                                   
+                s_left_skip[bp] = s_slice_syntax[bp][SLICE_SYNTAX_MB_START_1] & more_rbsp[bp] | 
+                                  s_slice_syntax[bp][SLICE_SYNTAX_MB_START_3] & more_rbsp[bp] ;
+                                                  
+                s_left_oop[bp]  = s_slice_syntax[bp][SLICE_SYNTAX_MB_START_0]                 ;
+               
+                // Last when no more rbsp after each MB and non-zero skip run
+                arc_last[bp-1-(bp%8)][bp%8] = !more_rbsp[bp] & s_slice_syntax[bp][SLICE_SYNTAX_MB_START_1] |
+                                              !more_rbsp[bp] & s_slice_syntax[bp][SLICE_SYNTAX_MB_START_3] |
+                                              !more_rbsp[bp] & mb_end_flag[bp]; 
                 // slice end Reduction OR
                 s_last[bp] = |arc_last[bp] | ((bp == WIDTH+31) ? s_last_reg[31] : 1'b0 ); // Reduction OR
-                // OOP Flag, set at slice start, clear after 1st mb
-                s_left_oop[bp-1] = ( slice_start_flag[bp] ) ? 1'b1 : ( s_mb_start[bp] ) ? 1'b0 : s_left_oop[bp];
             end // _slice_data_syntax
         end // bp
     end // _lattice
@@ -214,25 +219,20 @@ module gg_parse_lattice_rowslice
         for( int ii = 0; ii < BYTE_WIDTH; ii++ ) begin
             slice_end[BYTE_WIDTH-1-ii] = s_last[WIDTH+32-1-ii*8];
         end
-        mb_start[WIDTH-1:0] = s_mb_start[WIDTH+32-1:32];
-        mb_left_oop[WIDTH-1:0] = s_left_oop[WIDTH+32-1:32];
+        mb_start[WIDTH-1:0]     = s_mb_start[WIDTH+32-1:32];
+        mb_left_oop[WIDTH-1:0]  = s_left_oop[WIDTH+32-1:32];
         mb_left_skip[WIDTH-1:0] = s_left_skip[WIDTH+32-1:32];
     end
     
     always_ff @(posedge clk) begin // Lower 32 set of states are flopped  
         if( reset ) begin
             // Handle variable length codes   
-            s_slice_more_rbsp_reg <= 0;
             s_slice_syntax_reg <= 0; 
             s_last_reg <= 0;  
-            s_left_oop_reg <= 0; 
         end else begin
             // Handle the variable lenght arcs (up to 31 bits)
-            s_left_oop_reg[31] <= s_left_oop[31];
             s_last_reg[31] <= |arc_last[31]; // Can only occur on 1st padding bit
             for( int bp = 31; bp >= 0; bp-- ) begin
-                s_slice_more_rbsp_reg[bp][0] <= |arc_slice_more_rbsp[bp][0]; // Reduction OR
-                s_slice_more_rbsp_reg[bp][1] <= |arc_slice_more_rbsp[bp][1:15]; // Reduction OR
                 for( int ii = 0; ii < SLICE_SYNTAX_COUNT; ii++ ) begin
                     s_slice_syntax_reg[bp][ii] <= |arc_slice_syntax[bp][ii]; // Reduction OR
                 end
