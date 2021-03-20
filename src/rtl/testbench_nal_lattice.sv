@@ -8,8 +8,8 @@ module testbench_nal_lattice(
     //parameter WID = 128;
     parameter WID = 128;
     parameter BYTE_WID = WID / 8;
-    parameter FILE_SKIP_BYTES = 2640; // advance to 2nd frame: 2000000121f76039fef4bd8d880e1c07
-
+    //parameter FILE_SKIP_BYTES = 2640; // advance to 2nd frame: 2000000121f76039fef4bd8d880e1c07
+    parameter FILE_SKIP_BYTES = 0;
     
     //////////////////////
     // Let there be Clock!
