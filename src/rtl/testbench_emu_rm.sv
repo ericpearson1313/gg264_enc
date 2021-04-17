@@ -84,12 +84,14 @@ module testbench_emu_rm(
     
 
     logic [0:23][127:0] emu_rm;
+    logic [0:23][15:0] emu_flag;
     int ptr;
     int err;
     logic [0:2][7:0] byte_in;
     
     initial begin
-        // Set initial data
+        err = 0; // error count
+       // Set initial data
         ref_in = {
         128'h00_01_02_03_04_05_06_07_08_09_0A_0b_0c_0d_0e_0f ,
         128'h10_11_12_13_14_15_16_17_18_19_1A_1b_1c_1d_1e_1f ,
@@ -165,6 +167,7 @@ module testbench_emu_rm(
 
         ptr = 0;
         emu_rm = 0;
+        emu_flag = 0;
         for( int ii = 0; ii < 24*16-2; ii++ ) begin
             byte_in[0] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
             byte_in[1] = ref_in[(ii+1)>>4][127-((ii+1)%16)*8-:8];
@@ -176,6 +179,7 @@ module testbench_emu_rm(
                 emu_rm[ptr>>4][127-((ptr%16)*8)-:8] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
                 ptr++;
                 ii++;
+                emu_flag[ptr>>4][15-ptr%16] = 1'b1; // mark the protected byte (next)
             end else begin
                 emu_rm[ptr>>4][127-((ptr%16)*8)-:8] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
                 ptr++;
@@ -189,7 +193,7 @@ module testbench_emu_rm(
         // Print emu removed words
         $write(" Emulation removed data\n");
         for( int ii = 0; ii < 24; ii++ ) begin       
-            $write("%32h\n", emu_rm[ii] );
+            $write("%32h,  %4h\n", emu_rm[ii], emu_flag[ii] );
         end
         
         // Reset to clean pipe
@@ -202,7 +206,6 @@ module testbench_emu_rm(
 
         // 25 cycles, 24 with data in, and 1 to flush
         
-        err = 0;
         ptr = 0; // index into output list
         for( int ii = 0; ii < 26; ii++ ) begin
             if( ii < 24 ) begin
@@ -216,9 +219,9 @@ module testbench_emu_rm(
             #1;
             @(negedge clk); 
             if( ovalid ) begin
-                if( emu_rm[ptr] != oport ) begin
+                if( emu_rm[ptr] != oport || emu_flag[ptr] != oflag ) begin
                     $write("ERR found in word %d\n", ptr );
-                    $write("Expected = %32h\n", emu_rm[ptr] );
+                    $write("Expected = %32h, flag = %4h\n", emu_rm[ptr], emu_flag[ptr] );
                     $write("Actual   = %32h, flag = %4h\n", oport, oflag );
                     err++;
                 end 
@@ -259,6 +262,7 @@ module testbench_emu_rm(
 
         ptr = 0;
         emu_rm = 0;
+        emu_flag = 0;
         for( int ii = 0; ii < 24*16-2; ii++ ) begin
             byte_in[0] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
             byte_in[1] = ref_in[(ii+1)>>4][127-((ii+1)%16)*8-:8];
@@ -270,7 +274,8 @@ module testbench_emu_rm(
                 emu_rm[ptr>>4][127-((ptr%16)*8)-:8] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
                 ptr++;
                 ii++;
-            end else begin
+                emu_flag[ptr>>4][15-ptr%16] = 1'b1; // mark the protected byte (next)
+           end else begin
                 emu_rm[ptr>>4][127-((ptr%16)*8)-:8] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
                 ptr++;
             end
@@ -283,7 +288,7 @@ module testbench_emu_rm(
         // Print emu removed words
         $write(" Emulation removed data\n");
         for( int ii = 0; ii < 24; ii++ ) begin       
-            $write("%32h\n", emu_rm[ii] );
+            $write("%32h,  %4h\n", emu_rm[ii], emu_flag[ii] );
         end
         
         // Reset to clean pipe
@@ -296,7 +301,7 @@ module testbench_emu_rm(
 
         // 25 cycles, 24 with data in, and 1 to flush
         
-        err = 0;
+
         ptr = 0; // index into output list
         for( int ii = 0; ii < 26; ii++ ) begin
             if( ii < 24 ) begin
@@ -310,9 +315,9 @@ module testbench_emu_rm(
             #1;
             @(negedge clk); 
             if( ovalid ) begin
-                if( emu_rm[ptr] != oport ) begin
+                if( emu_rm[ptr] != oport || emu_flag[ptr] != oflag ) begin
                     $write("ERR found in word %d\n", ptr );
-                    $write("Expected = %32h\n", emu_rm[ptr] );
+                    $write("Expected = %32h, flag = %4h\n", emu_rm[ptr], emu_flag[ptr] );
                     $write("Actual   = %32h, flag = %4h\n", oport, oflag );
                     err++;
                 end 

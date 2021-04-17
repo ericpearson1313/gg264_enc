@@ -175,7 +175,8 @@ module gg_emulation_remove
                     remove_shift[ii+1][bb] = ( emu_or[ii][2] ) ? remove_shift[ii][bb+1] : remove_shift[ii][bb];
                 end else begin
                     remove_shift[ii+1][bb][7:0] = ( emu_or[ii][bb-pos] ) ? remove_shift[ii][bb+1][7:0] : remove_shift[ii][bb][7:0];
-                    remove_shift[ii+1][bb][8]   = ( emu_or[ii][bb-pos] ) ? emu[bb] /* flag prot byte*/ : remove_shift[ii][bb][8];
+                    remove_shift[ii+1][bb][8]   = ( emu_or[ii][bb-pos] ) ?(emu[bb] /* flag prot byte*/ |
+                                                                           remove_shift[ii][bb+1][8] ) : remove_shift[ii][bb][8];
                 end
             end
         end
