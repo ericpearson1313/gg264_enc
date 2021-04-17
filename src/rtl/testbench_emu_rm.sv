@@ -82,7 +82,15 @@ module testbench_emu_rm(
          
     logic [0:23][127:0] ref_in;
     
-    assign ref_in = {
+
+    logic [0:23][127:0] emu_rm;
+    int ptr;
+    int err;
+    logic [0:2][7:0] byte_in;
+    
+    initial begin
+        // Set initial data
+        ref_in = {
         128'h00_01_02_03_04_05_06_07_08_09_0A_0b_0c_0d_0e_0f ,
         128'h10_11_12_13_14_15_16_17_18_19_1A_1b_1c_1d_1e_1f ,
         128'h20_21_22_23_24_25_26_27_28_29_2A_2b_2c_2d_2e_2f ,
@@ -108,9 +116,7 @@ module testbench_emu_rm(
         128'h19_00_00_00_00_00_00_00_00_00_00_00_00_00_00_00 ,
         128'h20_00_00_00_00_00_00_00_00_00_00_00_00_00_00_00 
         };
-
-
-    initial begin
+       
         
         // Idle state
         reset = 1;
@@ -121,7 +127,10 @@ module testbench_emu_rm(
         reset = 0;
         for( int ii = 0; ii < 5; ii++ ) @(posedge clk); #1; // 5 !reset cycles
 
+        ////////////////////////////////////////////////////
         // TEST 0 : 10 words of all zero
+        ////////////////////////////////////////////////////
+
         valid = 1;
         iport = 128'h6;
         for( int ii = 0; ii < 10; ii++ ) @(posedge clk); #1;  // 10 cycles
@@ -129,7 +138,10 @@ module testbench_emu_rm(
         iport = 128'b0;
         for( int ii = 0; ii < 5; ii++ ) @(posedge clk); #1; // 5 cycles
         
+        ////////////////////////////////////////////////////
         // TEST 1 : 24 words of iport data, no check
+        ////////////////////////////////////////////////////
+
         reset = 1;
         for( int ii = 0; ii < 5; ii++ ) @(posedge clk); #1; // 5 reset cycles
         reset = 0;
@@ -145,9 +157,182 @@ module testbench_emu_rm(
         iport = 0;
         for( int ii = 0; ii < 5; ii++ ) @(posedge clk); #1; // 5 cycles
          
-        // End Simulation        
+        ////////////////////////////////////////////////////
+        // TEST 2 : same as test 1 but with checking
+        ////////////////////////////////////////////////////
+        // Simultaneously feed input, and calculate output,
+        // compare output when ovalid strobes asserted
+
+        ptr = 0;
+        emu_rm = 0;
+        for( int ii = 0; ii < 24*16-2; ii++ ) begin
+            byte_in[0] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
+            byte_in[1] = ref_in[(ii+1)>>4][127-((ii+1)%16)*8-:8];
+            byte_in[2] = ref_in[(ii+2)>>4][127-((ii+2)%16)*8-:8];
+            if( byte_in == 24'h00_00_03 ) begin
+                emu_rm[ptr>>4][127-((ptr%16)*8)-:8] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
+                ptr++;
+                ii++;
+                emu_rm[ptr>>4][127-((ptr%16)*8)-:8] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
+                ptr++;
+                ii++;
+            end else begin
+                emu_rm[ptr>>4][127-((ptr%16)*8)-:8] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
+                ptr++;
+            end
+        end
+        // Print orig words
+        $write(" Original data\n");
+        for( int ii = 0; ii < 24; ii++ ) begin       
+            $write("%32h\n", ref_in[ii] );
+        end
+        // Print emu removed words
+        $write(" Emulation removed data\n");
+        for( int ii = 0; ii < 24; ii++ ) begin       
+            $write("%32h\n", emu_rm[ii] );
+        end
+        
+        // Reset to clean pipe
+        reset = 1;
+        valid = 0;
+        iport = 0;
+        for( int ii = 0; ii < 5; ii++ ) @(posedge clk); #1; // 5 reset cycles
+        reset = 0;
+        for( int ii = 0; ii < 5; ii++ ) @(posedge clk); #1; // 5 !reset cycles
+
+        // 25 cycles, 24 with data in, and 1 to flush
+        
+        err = 0;
+        ptr = 0; // index into output list
+        for( int ii = 0; ii < 26; ii++ ) begin
+            if( ii < 24 ) begin
+                valid = 1;
+                iport = ref_in[ii];
+            end else begin
+                valid = 0;
+                iport = 0;
+            end
+            @(posedge clk);
+            #1;
+            @(negedge clk); 
+            if( ovalid ) begin
+                if( emu_rm[ptr] != oport ) begin
+                    $write("ERR found in word %d\n", ptr );
+                    $write("Expected = %32h\n", emu_rm[ptr] );
+                    $write("Actual   = %32h, flag = %4h\n", oport, oflag );
+                    err++;
+                end 
+                ptr++;
+            end
+        end
+                
+        ////////////////////////////////////////////////////
+       // TEST 3 - Random data
+        ////////////////////////////////////////////////////
+
+        ref_in = {
+        128'h00_00_00_00_03_00_00_00_00_03_00_00_00_00_00_00,
+        128'h03_03_00_00_00_00_00_00_03_00_03_00_00_00_00_00,
+        128'h00_03_03_00_00_03_03_00_03_00_00_00_03_03_00_00,
+        128'h00_03_00_00_03_00_03_03_03_03_00_00_00_00_00_00,
+        128'h00_00_00_03_00_00_00_03_00_03_00_00_00_03_00_03,
+        128'h00_00_00_00_00_00_00_03_00_03_00_00_03_00_03_03,
+        128'h00_00_00_00_00_03_00_00_03_00_00_00_00_00_00_00,
+        128'h00_00_03_00_03_00_00_00_03_03_00_00_00_00_00_00,
+        128'h03_00_00_00_00_00_00_03_00_00_03_00_00_00_00_00,
+        128'h00_00_00_03_00_00_00_00_00_03_00_00_00_03_00_00,
+        128'h00_00_00_00_03_00_00_00_03_00_00_00_00_00_03_00,
+        128'h00_00_00_00_03_00_00_00_00_00_00_00_00_00_03_00,
+        128'h03_00_00_03_03_03_03_00_00_03_00_00_00_00_00_00,
+        128'h00_00_00_00_03_03_00_00_00_03_00_03_03_00_00_00,
+        128'h00_00_03_00_00_00_00_00_00_03_00_00_03_00_00_00,
+        128'h00_00_00_00_00_03_00_00_00_00_00_00_03_00_00_00,
+        128'h00_00_00_00_00_00_00_00_00_00_00_00_03_00_00_00,
+        128'h00_00_00_00_00_00_03_00_00_00_00_00_00_00_03_00,
+        128'h00_00_00_03_03_00_00_00_00_03_00_03_00_00_03_00,
+        128'h00_00_00_00_00_03_00_00_03_00_00_00_03_03_00_00,
+        128'h00_03_00_00_00_00_00_00_00_03_00_00_00_00_00_00,
+        128'h03_00_03_00_03_00_00_03_00_03_00_00_00_00_00_00,
+        128'h19_00_00_00_00_00_00_00_00_00_00_00_00_00_00_00 ,
+        128'h20_00_00_00_00_00_00_00_00_00_00_00_00_00_00_00 
+        };
+
+        ptr = 0;
+        emu_rm = 0;
+        for( int ii = 0; ii < 24*16-2; ii++ ) begin
+            byte_in[0] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
+            byte_in[1] = ref_in[(ii+1)>>4][127-((ii+1)%16)*8-:8];
+            byte_in[2] = ref_in[(ii+2)>>4][127-((ii+2)%16)*8-:8];
+            if( byte_in == 24'h00_00_03 ) begin
+                emu_rm[ptr>>4][127-((ptr%16)*8)-:8] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
+                ptr++;
+                ii++;
+                emu_rm[ptr>>4][127-((ptr%16)*8)-:8] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
+                ptr++;
+                ii++;
+            end else begin
+                emu_rm[ptr>>4][127-((ptr%16)*8)-:8] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
+                ptr++;
+            end
+        end
+        // Print orig words
+        $write(" Original data\n");
+        for( int ii = 0; ii < 24; ii++ ) begin       
+            $write("%32h\n", ref_in[ii] );
+        end
+        // Print emu removed words
+        $write(" Emulation removed data\n");
+        for( int ii = 0; ii < 24; ii++ ) begin       
+            $write("%32h\n", emu_rm[ii] );
+        end
+        
+        // Reset to clean pipe
+        reset = 1;
+        valid = 0;
+        iport = 0;
+        for( int ii = 0; ii < 5; ii++ ) @(posedge clk); #1; // 5 reset cycles
+        reset = 0;
+        for( int ii = 0; ii < 5; ii++ ) @(posedge clk); #1; // 5 !reset cycles
+
+        // 25 cycles, 24 with data in, and 1 to flush
+        
+        err = 0;
+        ptr = 0; // index into output list
+        for( int ii = 0; ii < 26; ii++ ) begin
+            if( ii < 24 ) begin
+                valid = 1;
+                iport = ref_in[ii];
+            end else begin
+                valid = 0;
+                iport = 0;
+            end
+            @(posedge clk);
+            #1;
+            @(negedge clk); 
+            if( ovalid ) begin
+                if( emu_rm[ptr] != oport ) begin
+                    $write("ERR found in word %d\n", ptr );
+                    $write("Expected = %32h\n", emu_rm[ptr] );
+                    $write("Actual   = %32h, flag = %4h\n", oport, oflag );
+                    err++;
+                end 
+                ptr++;
+            end
+        end
+        
+        
+        
+        
+        
+        // End Simulation & summary
         valid = 0;
         for( int ii = 0; ii < 5; ii++ ) @(posedge clk); #1; 
+
+        if( err ) begin
+            $write("FAILED %d errors found\n", err );
+        end else begin
+            $write("PASSED\n" );
+        end
         $finish;
     end
 

@@ -65,7 +65,7 @@ module gg_emulation_remove
     always_comb begin
         emu_flag = 0;
         for( int ii = 0; ii < 48; ii++ ) begin
-            emu_flag[ii] = ( ii < 32 ) ? emu_reg[ii] : ( in_reg[ii]==8'h03 && in_reg[ii-2]==8'h00 && in_reg[ii-2]==8'h00 ) ? 1'b1 : 1'b0; 
+            emu_flag[ii] = ( ii < 32 ) ? emu_reg[ii] : ( in_reg[ii]==8'h03 && in_reg[ii-1]==8'h00 && in_reg[ii-2]==8'h00 ) ? 1'b1 : 1'b0; 
         end
     end
 
@@ -119,7 +119,7 @@ module gg_emulation_remove
                 emu_mask[ii][bb] = ( bb >= 16 + ii ) ? 1'b0 : emu[bb];
             end
             for( int jj = 0; jj < 8; jj++ ) begin // create reduced x3 emu flags
-                emu_reduce[ii][jj] = emu_mask[ii][jj*3+0] | emu_mask[ii][jj*3+1] | emu_mask[ii][jj+3+2]; // only 1 in 3 emu bits can be asserted!
+                emu_reduce[ii][jj] = emu_mask[ii][jj*3+0] | emu_mask[ii][jj*3+1] | emu_mask[ii][jj*3+2]; // only 1 in 3 emu bits can be asserted!
             end
             u_emu_sum[ii] = { 3'b000, emu_reduce[ii][4] } + { 3'b000, emu_reduce[ii][5] } + { 3'b000, emu_reduce[ii][6] } + { 3'b000, emu_reduce[ii][7] };
             l_emu_sum[ii] = { 3'b000, emu_reduce[ii][0] } + { 3'b000, emu_reduce[ii][1] } + { 3'b000, emu_reduce[ii][2] } + { 3'b000, emu_reduce[ii][3] };
