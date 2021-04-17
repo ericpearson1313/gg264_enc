@@ -41,7 +41,7 @@ module testbench_emu_rm(
     ///////////////////////
     
     initial begin
-        #(2000ns);
+        #(20000ns);
         $write("GOBBLE: Sim terminated; hard coded time limit reached.\n");
         $finish;
     end
@@ -325,6 +325,91 @@ module testbench_emu_rm(
             end
         end
         
+        ////////////////////////////////////////////////////
+       // TEST 4 - 10 runs of randomized data
+        ////////////////////////////////////////////////////
+
+        ptr = $random( 32'hdeadbeef ); // seed
+
+        for( int round = 0; round < 10; round++ ) begin
+        $write("random round %d\n", round );
+        ref_in = 0;
+        for( int ww = 0; ww < 22; ww++ ) begin
+            for( int ii = 0; ii < 128; ii+=8 ) begin
+                ptr = $random();
+                //$write("%8h ", ptr );
+                ref_in[ww][ii+7-:8] = ( ptr < 0 ) ? 8'h00 :
+                                      ( ptr & (1<<30) ) ? 8'h03 : (ptr & 8'hff);
+            end
+        end;
+                                       
+        
+        ptr = 0;
+        emu_rm = 0;
+        emu_flag = 0;
+        for( int ii = 0; ii < 24*16-2; ii++ ) begin
+            byte_in[0] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
+            byte_in[1] = ref_in[(ii+1)>>4][127-((ii+1)%16)*8-:8];
+            byte_in[2] = ref_in[(ii+2)>>4][127-((ii+2)%16)*8-:8];
+            if( byte_in == 24'h00_00_03 ) begin
+                emu_rm[ptr>>4][127-((ptr%16)*8)-:8] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
+                ptr++;
+                ii++;
+                emu_rm[ptr>>4][127-((ptr%16)*8)-:8] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
+                ptr++;
+                ii++;
+                emu_flag[ptr>>4][15-ptr%16] = 1'b1; // mark the protected byte (next)
+           end else begin
+                emu_rm[ptr>>4][127-((ptr%16)*8)-:8] = ref_in[(ii+0)>>4][127-((ii+0)%16)*8-:8];
+                ptr++;
+            end
+        end
+        // Print orig words
+        $write(" Original data\n");
+        for( int ii = 0; ii < 24; ii++ ) begin       
+            $write("%32h\n", ref_in[ii] );
+        end
+        // Print emu removed words
+        $write(" Emulation removed data\n");
+        for( int ii = 0; ii < 24; ii++ ) begin       
+            $write("%32h,  %4h\n", emu_rm[ii], emu_flag[ii] );
+        end
+        
+        // Reset to clean pipe
+        reset = 1;
+        valid = 0;
+        iport = 0;
+        for( int ii = 0; ii < 5; ii++ ) @(posedge clk); #1; // 5 reset cycles
+        reset = 0;
+        for( int ii = 0; ii < 5; ii++ ) @(posedge clk); #1; // 5 !reset cycles
+
+        // 25 cycles, 24 with data in, and 1 to flush
+        
+
+        ptr = 0; // index into output list
+        for( int ii = 0; ii < 26; ii++ ) begin
+            if( ii < 24 ) begin
+                valid = 1;
+                iport = ref_in[ii];
+            end else begin
+                valid = 0;
+                iport = 0;
+            end
+            @(posedge clk);
+            #1;
+            @(negedge clk); 
+            if( ovalid ) begin
+                if( emu_rm[ptr] != oport || emu_flag[ptr] != oflag ) begin
+                    $write("ERR found in word %d\n", ptr );
+                    $write("Expected = %32h, flag = %4h\n", emu_rm[ptr], emu_flag[ptr] );
+                    $write("Actual   = %32h, flag = %4h\n", oport, oflag );
+                    err++;
+                end 
+                ptr++;
+            end
+        end
+        
+        end //round
         
         
         
