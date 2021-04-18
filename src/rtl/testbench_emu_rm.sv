@@ -41,7 +41,7 @@ module testbench_emu_rm(
     ///////////////////////
     
     initial begin
-        #(30000ns);
+        #(60000ns);
         $write("GOBBLE: Sim terminated; hard coded time limit reached.\n");
         $finish;
     end
@@ -439,9 +439,8 @@ module testbench_emu_rm(
         for( int ii = 0; ii < 5; ii++ ) @(posedge clk); #1; // 5 !reset cycles
         
         // Operate on -ve edge, far away from +ve edge
-        @(negedge clk );         
         
-        for( int cycle = 0; cycle < 2000; cycle++ ) begin
+        for( int cycle = 0; cycle < 5000; cycle++ ) begin
         
             // rand determine if valid cycle
             valid = $urandom() % 2;
@@ -502,8 +501,9 @@ module testbench_emu_rm(
                 rr = ( rr + 1 ) % 8;
             end            
             // rise/fall of clock
-            @(negedge clk);        
+     
             @(posedge clk);            
+            #1;
         end // cycle
         valid = 0;
         iport = 0;
