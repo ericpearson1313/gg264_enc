@@ -41,7 +41,7 @@ module testbench_emu_rm(
     ///////////////////////
     
     initial begin
-        #(20000ns);
+        #(30000ns);
         $write("GOBBLE: Sim terminated; hard coded time limit reached.\n");
         $finish;
     end
@@ -87,6 +87,12 @@ module testbench_emu_rm(
     logic [0:23][15:0] emu_flag;
     int ptr;
     int err;
+    int in_ptr; // Rolling input buffer, so last val avail
+    int ww, rr; // emulation output fifo (in bytes)
+    int val;
+    int pre;
+    int bb;
+    
     logic [0:2][7:0] byte_in;
     
     initial begin
@@ -326,12 +332,12 @@ module testbench_emu_rm(
         end
         
         ////////////////////////////////////////////////////
-       // TEST 4 - 10 runs of randomized data
+       // TEST 4 - 5 runs of randomized data
         ////////////////////////////////////////////////////
 
         ptr = $random( 32'hdeadbeef ); // seed
 
-        for( int round = 0; round < 10; round++ ) begin
+        for( int round = 0; round < 6; round++ ) begin
         $write("random round %d\n", round );
         ref_in = 0;
         for( int ww = 0; ww < 22; ww++ ) begin
@@ -410,11 +416,103 @@ module testbench_emu_rm(
         end
         
         end //round
+
+        //////////////////////////////////////////////////////
+       // TEST 5 - infinite length, random data, random valid
+        //////////////////////////////////////////////////////
         
+        // Setup
+        ref_in = ~0;
+        emu_rm = 0;
+        emu_flag = 0;
+        ww = 126;
+        rr = 0;
+        ptr = 0;
+        valid = 0;
+        iport = 0;
+        pre = -2;
         
+        // Reset to clean pipe
+        reset = 1;
+        for( int ii = 0; ii < 5; ii++ ) @(posedge clk); #1; // 5 reset cycles
+        reset = 0;
+        for( int ii = 0; ii < 5; ii++ ) @(posedge clk); #1; // 5 !reset cycles
         
+        // Operate on -ve edge, far away from +ve edge
+        @(negedge clk );         
         
+        for( int cycle = 0; cycle < 2000; cycle++ ) begin
+        
+            // rand determine if valid cycle
+            valid = $urandom() % 2;
+            iport = 0;
+            
+            
+            if( valid ) begin // random iport data
+            
+                // generate random word as input (use rolling buffer) 
+                for( int bb = 0; bb < 16; bb++ ) begin
+                    val = $random();
+                    ref_in[ptr][127-bb*8-:8] = ( val < 0 ) ? 8'h00 :
+                                               ( val & (1<<30) ) ? 8'h03 : (val & 8'hff); 
+                end
+                   
+                // assign iport, ovalid
+                iport = ref_in[ptr];
+                $write("[%d] iport = %32h\n", cycle, iport );
+                
+                // calc emulation and write to fifo ww++ (will read from prev in port word) (ww is bytes)
+                for( bb = pre; bb < 14; bb++ ) begin // step thru 16 bytes
+                    byte_in[0] = ref_in[((((ptr+8)<<4)+(bb+0))>>4)%8][127-(((bb+0)+16)%16)*8-:8];
+                    byte_in[1] = ref_in[((((ptr+8)<<4)+(bb+1))>>4)%8][127-(((bb+1)+16)%16)*8-:8];
+                    byte_in[2] = ref_in[((((ptr+8)<<4)+(bb+2))>>4)%8][127-(((bb+2)+16)%16)*8-:8];
+                    if( byte_in == 24'h00_00_03 ) begin
+                        emu_rm[ww>>4][127-((ww%16)*8)-:8] = 0;
+                        ww = (ww + 1)%128;
+                        emu_flag[ww>>4][15-(ww%16)] = 1'b0; 
+                       
+                        emu_rm[ww>>4][127-((ww%16)*8)-:8] = 0;
+                        ww = (ww + 1)%128;
+                        emu_flag[ww>>4][15-(ww%16)] = 1'b1; // mark the protected byte (next)
+                        
+                        bb+=2; // since we processed 3 bytes
+                        
+                    end else begin
+                        emu_rm[ww>>4][127-((ww%16)*8)-:8] = ref_in[((((ptr+8)<<4)+(bb+0))>>4)%8][127-(((bb+0)+16)%16)*8-:8];
+                        ww = (ww + 1)%128;
+                        emu_flag[ww>>4][15-(ww%16)] = 1'b0; 
+                    end
+                end // bb  
+                pre = bb - 16; // in case we've processed last 1 or 2 already     
+               
+                ptr = ( ptr + 1 ) % 8; // just keep around 8 rows of input 
+            end // valid
+
+            // check ovalid
+            // if so, compare against emulation buffer and flags, rr++
+            if( ovalid ) begin
+                $write("[%d] oport = %32h, oflag = %4h\n", cycle, oport, oflag );
+                if( emu_rm[rr] != oport || emu_flag[rr] != oflag ) begin
+                    $write("ERR found in cycle %d\n", cycle );
+                    $write("Expected = %32h, flag = %4h\n", emu_rm[rr], emu_flag[rr] );
+                    $write("Actual   = %32h, flag = %4h\n", oport, oflag );
+                    err++;
+                    //$finish;
+                end 
+                rr = ( rr + 1 ) % 8;
+            end            
+            // rise/fall of clock
+            @(negedge clk);        
+            @(posedge clk);            
+        end // cycle
+        valid = 0;
+        iport = 0;
+
+
+        //////////////////////////////////////////////////////
         // End Simulation & summary
+        //////////////////////////////////////////////////////        
+
         valid = 0;
         for( int ii = 0; ii < 5; ii++ ) @(posedge clk); #1; 
 
